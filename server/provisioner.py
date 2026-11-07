@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import creator, deploy, fleet_store, runner, store
 
-VERSION = "1.23.11"
+VERSION = "1.23.12"
 
 RUNTIME_DIR = store.DATA_DIR / "runtime"
 DOWNLOAD_DIR = store.DATA_DIR / "downloads"

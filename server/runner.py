@@ -11,7 +11,6 @@ import time
 from pathlib import Path
 
 CREATE_NEW_PROCESS_GROUP = 0x00000200
-DETACHED_PROCESS = 0x00000008
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07")
 
 _kernel32 = ctypes.windll.kernel32
@@ -245,6 +244,14 @@ def find_napcat_bat(napcat_dir: Path, qq: str = "") -> Path | None:
     return candidates[0]
 
 
+def napcat_log_path(inst: dict) -> Path:
+    """NapCat 控制台输出统一落到实例的 data/logs/napcat-console.log。"""
+    root = Path(inst.get("root") or "")
+    if not root:
+        return Path("data") / "logs" / "napcat-console.log"
+    return root / "data" / "logs" / "napcat-console.log"
+
+
 def tail(path: Path, lines: int = 200, max_bytes: int = 512 * 1024) -> list[str]:
     path = Path(path)
     if not path.exists():
@@ -332,7 +339,7 @@ class Runner:
                 stdout=console,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
-                creationflags=CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS,
+                creationflags=subprocess.CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP,
             )
         except Exception as exc:  # noqa: BLE001
             console.close()
@@ -409,27 +416,55 @@ class Runner:
         }
 
     def start_napcat(self, inst: dict) -> dict:
+        """在后台静默启动 NapCat，输出写入实例的 napcat-console.log。
+
+        不再弹 cmd 窗口；QQ 扫码在管理台的「扫码登录」页完成。
+        """
         napcat = Path(inst.get("napcat_dir") or "")
-        bat = find_napcat_bat(napcat, str(inst.get("qq") or ""))
-        if bat is None:
-            raise RunnerError("未在 NapCat 目录中找到 napcat.quick.bat / napcat.bat")
-        if napcat_process_running(napcat):
-            return {"launched": None, "already": True, "script": str(bat)}
         qq = str(inst.get("qq") or "").strip()
-        boot = bat.parent / "NapCatWinBootMain.exe"
-        if boot.is_file():
-            subprocess.Popen(
-                napcat_boot_command(boot, qq),
-                cwd=str(boot.parent),
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
-            )
+        bat = find_napcat_bat(napcat, qq)
+        boot: Path | None = None
+        if bat is not None:
+            candidate = bat.parent / "NapCatWinBootMain.exe"
+            if candidate.is_file():
+                boot = candidate
+        if boot is None:
+            candidate = napcat / "NapCatWinBootMain.exe"
+            if candidate.is_file():
+                boot = candidate
+        if bat is None and boot is None:
+            raise RunnerError("未在 NapCat 目录中找到 napcat.quick.bat / napcat.bat / NapCatWinBootMain.exe")
+        if napcat_process_running(napcat):
+            return {"launched": None, "already": True, "script": str(bat or boot)}
+
+        log_path = napcat_log_path(inst)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} 启动 NapCat =====\n")
+
+        if boot is not None:
+            command = f'chcp 65001 >nul && "{boot}"'
+            if qq:
+                command += f" {qq}"
+            cwd = boot.parent
         else:
-            subprocess.Popen(
-                ["cmd.exe", "/c", bat.name],
-                cwd=str(bat.parent),
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            command = f'cmd.exe /c chcp 65001 >nul && "{bat}"'
+            cwd = bat.parent
+
+        handle = log_path.open("a", encoding="utf-8", errors="replace")
+        try:
+            proc = subprocess.Popen(
+                f"cmd.exe /c {command}",
+                cwd=str(cwd),
+                stdin=subprocess.DEVNULL,
+                stdout=handle,
+                stderr=subprocess.STDOUT,
+                creationflags=subprocess.CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP,
             )
-        return {"launched": str(bat), "already": False}
+            pid = proc.pid
+        finally:
+            handle.close()
+        return {"launched": str(bat or boot), "already": False, "pid": pid}
 
 
 runner = Runner()

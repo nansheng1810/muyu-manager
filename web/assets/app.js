@@ -83,6 +83,8 @@ const state = {
   logSource: "bot",
   logTimer: null,
   logAuto: true,
+  qrInst: "",
+  qrTimer: null,
   thinkES: null,
   thinkRuns: new Map(),
   thinkNodes: {},
@@ -382,6 +384,7 @@ const ROUTES = {
   evals: { section: "personas", title: "质量回归", sub: "固定用例评估人格回复的一致性与边界", render: viewEvals },
   review: { section: "monitor", title: "回复复盘", sub: "每条回复注入了哪些人格、记忆、身份校准与最终 system prompt", render: viewReview },
   think: { section: "monitor", title: "实时思考", sub: "在 QQ 里给机器人发消息，模型的思考过程实时显示在这里", render: viewThinkLive },
+  qqlogin: { section: "monitor", title: "扫码登录", sub: "NapCat 二维码登录，内置显示、失效自动刷新", render: viewQrLogin },
   logs: { section: "monitor", title: "运行日志", sub: "实时查看机器人运行输出", render: viewLogs },
   alerts: { section: "monitor", title: "告警中心", sub: "健康、审批、任务与备份的待处理异常", render: viewAlerts },
   drift: { section: "monitor", title: "一致性", sub: "对比实例之间的插件、模型与人格差异", render: viewDrift },
@@ -495,9 +498,10 @@ const IA_GROUPS = {
   monitor: {
     hub: "hubMonitor",
     groups: [
-      { name: "运行", desc: "回复复盘、实时思考与运行日志", items: [
+      { name: "运行", desc: "回复复盘、实时思考、扫码登录与运行日志", items: [
         { route: "review", icon: "logs" },
         { route: "think", icon: "terminal" },
+        { route: "qqlogin", icon: "terminal" },
         { route: "logs", icon: "folder" },
       ] },
       { name: "巡检", desc: "告警、一致性、资源与端到端检查", items: [
@@ -598,6 +602,7 @@ async function navigate(silent = false) {
     presenceUI?.leave();
     opsUI?.leave();
     clearLogTimer();
+    clearQrTimer();
     clearAutoTimer();
     closeThinkStream();
   }
@@ -849,7 +854,7 @@ async function viewBots(view) {
                 <div class="actions" style="padding-right:8px">
                   <button class="btn sm ghost icon-only" data-act="${inst.status?.running ? "stop" : "start"}" data-id="${inst.id}" title="${inst.status?.running ? "停止" : "启动"}">${icon(inst.status?.running ? "stop" : "play")}</button>
                   <button class="btn sm ghost icon-only" data-act="restart" data-id="${inst.id}" title="重启" ${inst.status?.running ? "" : "disabled"}>${icon("restart")}</button>
-                  <button class="btn sm ghost icon-only" data-napcat="${inst.id}" title="启动 NapCat" ${inst.napcat?.configured ? "" : "disabled"}>${icon("pulse")}</button>
+                  <button class="btn sm ghost icon-only" data-napcat="${inst.id}" title="扫码登录 / NapCat 控制台" ${inst.napcat?.configured ? "" : "disabled"}>${icon("pulse")}</button>
                   ${inst.status?.running && !inst.status?.managed ? `<button class="btn sm ghost icon-only" data-act="adopt" data-id="${inst.id}" title="接管外部进程">${icon("check")}</button>` : ""}
                   <button class="btn sm ghost" data-detail="${inst.id}">详情</button>
                   <button class="btn sm ghost icon-only" data-edit="${inst.id}" title="编辑">${icon("edit")}</button>
@@ -862,18 +867,9 @@ async function viewBots(view) {
     </div>` : `<div class="empty">${icon("bots")}<h4>暂无实例</h4><p>点击右上角新增，或在设置页检查 AstrBot 源码路径。</p></div>`}`;
 
   bindBotActions(view);
-  $$("[data-napcat]", view).forEach((btn) => btn.addEventListener("click", async () => {
+  $$("[data-napcat]", view).forEach((btn) => btn.addEventListener("click", () => {
     const inst = state.instances.find((i) => i.id === btn.dataset.napcat);
-    if (!inst) return;
-    btn.disabled = true;
-    try {
-      const res = await api(`/api/instances/${inst.id}/napcat/start`, { method: "POST" });
-      toast(res?.already ? "NapCat 已在运行，请在 QQ 窗口确认已登录" : "NapCat 已启动，请在弹出的窗口完成 QQ 登录");
-      setTimeout(() => refreshAll(true), 1200);
-    } catch (err) {
-      toast(err.message, "err");
-      btn.disabled = false;
-    }
+    if (inst) openBotDetail(inst.id, "login");
   }));
   $$("[data-detail]", view).forEach((btn) =>
     btn.addEventListener("click", () => openBotDetail(btn.dataset.detail)));
@@ -894,6 +890,7 @@ async function viewBots(view) {
 
 const BOT_DETAIL_TABS = [
   ["runtime", "概览"],
+  ["login", "扫码 / 控制台"],
   ["plugins", "插件"],
   ["permissions", "工具权限"],
   ["access", "DSH 接入"],
@@ -901,6 +898,7 @@ const BOT_DETAIL_TABS = [
 ];
 
 let botDetailLogTimer = null;
+let botDetailQrTimer = null;
 
 function clearBotDetailLogTimer() {
   if (botDetailLogTimer) {
@@ -909,10 +907,18 @@ function clearBotDetailLogTimer() {
   }
 }
 
+function clearBotDetailQrTimer() {
+  if (botDetailQrTimer) {
+    clearInterval(botDetailQrTimer);
+    botDetailQrTimer = null;
+  }
+}
+
 function closeBotDetail() {
   const root = $("#bot-detail-root");
   if (!root) return;
   clearBotDetailLogTimer();
+  clearBotDetailQrTimer();
   root.classList.remove("open");
   setTimeout(() => root.remove(), 200);
 }
@@ -955,11 +961,13 @@ function openBotDetail(instId, tab = "runtime") {
   const body = $("#bot-detail-body", root);
   const showTab = async (name) => {
     clearBotDetailLogTimer();
+    clearBotDetailQrTimer();
     root.querySelectorAll("[data-bot-tab]").forEach((btn) =>
       btn.classList.toggle("active", btn.dataset.botTab === name));
     body.innerHTML = `<div class="skeleton" style="height:180px"></div>`;
     try {
       if (name === "runtime") await renderBotRuntimeTab(body, inst);
+      else if (name === "login") await renderBotLoginTab(body, inst);
       else if (name === "plugins") await renderBotPluginsTab(body, inst);
       else if (name === "permissions") await renderBotPermissionsTab(body, inst);
       else if (name === "access") await renderBotAccessTab(body, inst);
@@ -998,7 +1006,7 @@ async function renderBotRuntimeTab(body, inst) {
       <div class="actions" style="margin-top:12px;flex-wrap:wrap">
         <button class="btn sm ${running ? "danger" : "primary"}" data-bot-act="${running ? "stop" : "start"}">${icon(running ? "stop" : "play")}${running ? "停止" : "启动"}</button>
         <button class="btn sm ghost" data-bot-act="restart" ${running ? "" : "disabled"}>${icon("restart")}重启</button>
-        <button class="btn sm ghost" data-bot-act="napcat" ${inst.napcat?.configured ? "" : "disabled"}>${icon("pulse")}启动 NapCat</button>
+        <button class="btn sm ghost" data-bot-login ${inst.napcat?.configured ? "" : "disabled"}>${icon("pulse")}扫码登录 / 控制台</button>
       </div>
     </div>
     <div class="drawer-section">
@@ -1014,6 +1022,11 @@ async function renderBotRuntimeTab(body, inst) {
     </div>`;
   body.querySelectorAll("[data-bot-act]").forEach((btn) =>
     btn.addEventListener("click", () => runBotAction(inst, btn.dataset.botAct, btn)));
+  const loginBtn = body.querySelector("[data-bot-login]");
+  if (loginBtn) loginBtn.addEventListener("click", () => {
+    const tab = body.closest(".drawer")?.querySelector('[data-bot-tab="login"]');
+    if (tab) tab.click();
+  });
   loadSummary(inst.id).then((summary) => {
     if (!body.isConnected) return;
     const model = body.querySelector("[data-bot-model]");
@@ -1026,19 +1039,83 @@ async function renderBotRuntimeTab(body, inst) {
 async function runBotAction(inst, act, btn) {
   btn.disabled = true;
   try {
-    if (act === "napcat") {
-      const res = await api(`/api/instances/${inst.id}/napcat/start`, { method: "POST" });
-      toast(res?.already ? "NapCat 已在运行，请在 QQ 窗口确认已登录" : "NapCat 已启动，请在弹出的窗口完成 QQ 登录");
+    await api(`/api/instances/${inst.id}/${act}`, { method: "POST" });
+    toast(`${inst.name} 已${act === "stop" ? "停止" : act === "start" ? "启动" : "重启"}，稍候刷新状态`);
+    if (act === "start") {
+      openBotDetail(inst.id, "login");
     } else {
-      await api(`/api/instances/${inst.id}/${act}`, { method: "POST" });
-      toast(`${inst.name} 已${act === "stop" ? "停止" : act === "start" ? "启动" : "重启"}，稍候刷新状态`);
+      closeBotDetail();
     }
-    closeBotDetail();
     setTimeout(() => refreshAll(true), 1200);
   } catch (err) {
     toast(err.message, "err");
     btn.disabled = false;
   }
+}
+
+async function renderBotLoginTab(body, inst) {
+  if (!inst.napcat?.configured) {
+    body.innerHTML = `<div class="empty" style="padding:24px">${icon("alert")}<h4>尚未配置 NapCat</h4>
+      <p>请先在「编辑资料」里填写 NapCat 目录与 WebUI 端口。</p></div>`;
+    return;
+  }
+  body.innerHTML = `
+    <div class="drawer-section">
+      <div class="section-head" style="margin:0 0 12px">
+        <h2 style="font-size:14px">QQ 扫码登录</h2>
+        <span class="qr-pill" id="q-pill">连接中…</span>
+      </div>
+      <div class="qr-embed">
+        <div class="qr-card">
+          <div class="qr-img" id="q-img"><span class="empty">正在连接 NapCat…</span></div>
+          <div class="qr-side">
+            <h3 id="q-title">等待扫码</h3>
+            <p id="q-msg">点击「启动 NapCat」后，二维码会自动显示在这里。</p>
+            <p class="qr-tip">二维码失效后自动刷新，也可以手动换一张。</p>
+            <p class="qr-count" id="q-count"></p>
+          </div>
+        </div>
+      </div>
+      <div class="actions" style="flex-wrap:wrap">
+        <button class="btn sm primary" id="q-start">${icon("play")}启动 NapCat</button>
+        <button class="btn sm ghost" id="q-refresh">${icon("refresh")}刷新二维码</button>
+        <div class="spacer"></div>
+        <label class="checkline"><input type="checkbox" id="q-auto" checked>自动刷新</label>
+      </div>
+    </div>
+    <div class="drawer-section">
+      <h4>NapCat 控制台</h4>
+      <div class="terminal drawer-log-sm" id="bot-napcat-log"><span class="empty">加载中…</span></div>
+    </div>`;
+  $("#q-start", body).addEventListener("click", () => startQr(body, inst.id));
+  $("#q-refresh", body).addEventListener("click", () => fetchQr(body, false, true, inst.id));
+
+  const loadLog = async (quiet = false) => {
+    const term = $("#bot-napcat-log", body);
+    if (!term) return;
+    try {
+      const data = await api(`/api/instances/${inst.id}/logs?lines=300&source=napcat`);
+      const text = data.text || "";
+      if (!text.trim()) {
+        if (!quiet) term.innerHTML = `<span class="empty">NapCat 启动后，控制台输出会内嵌显示在这里。</span>`;
+        return;
+      }
+      const atBottom = term.scrollHeight - term.scrollTop - term.clientHeight < 40;
+      term.innerHTML = logLinesHtml(text);
+      if (atBottom || !quiet) term.scrollTop = term.scrollHeight;
+    } catch (err) {
+      if (!quiet) term.innerHTML = `<span class="empty">${esc(err.message)}</span>`;
+    }
+  };
+
+  const tick = () => Promise.all([fetchQr(body, true, false, inst.id), loadLog(true)]);
+  $("#q-auto", body).addEventListener("change", (event) => {
+    clearBotDetailQrTimer();
+    if (event.target.checked) botDetailQrTimer = setInterval(tick, 3000);
+  });
+  await tick();
+  clearBotDetailQrTimer();
+  botDetailQrTimer = setInterval(tick, 3000);
 }
 
 async function renderBotPluginsTab(body, inst) {
@@ -3213,6 +3290,122 @@ function renderAutoLearn(view, inst, cfg) {
 }
 
 
+/* -------------------------------------------------------------- qr login */
+
+function clearQrTimer() {
+  if (state.qrTimer) { clearInterval(state.qrTimer); state.qrTimer = null; }
+}
+
+async function viewQrLogin(view) {
+  if (!state.instances.length) {
+    view.innerHTML = `<div class="log-terminal"><span class="empty">还没有机器人实例，请先在「机器人管理」中新增。</span></div>`;
+    return;
+  }
+  if (!state.qrInst || !state.instances.some((i) => i.id === state.qrInst)) {
+    state.qrInst = state.instances[0].id;
+  }
+  view.innerHTML = `
+    <div class="qr-page">
+      <div class="log-toolbar">
+        <select id="q-inst" style="width:auto;min-width:190px">
+          ${state.instances.map((i) => `<option value="${i.id}" ${i.id === state.qrInst ? "selected" : ""}>${esc(i.name)}${i.qq ? ` · ${esc(String(i.qq))}` : ""}</option>`).join("")}
+        </select>
+        <button class="btn sm" id="q-start">${icon("play")}启动并扫码</button>
+        <button class="btn sm ghost" id="q-refresh">${icon("refresh")}刷新二维码</button>
+        <div class="spacer"></div>
+        <span class="qr-pill" id="q-pill">连接中…</span>
+      </div>
+      <div class="qr-stage">
+        <div class="qr-card">
+          <div class="qr-img" id="q-img"><span class="empty">正在连接 NapCat…</span></div>
+          <div class="qr-side">
+            <h3 id="q-title">等待扫码</h3>
+            <p id="q-msg">如果 NapCat 尚未启动，请点击「启动并扫码」。</p>
+            <p class="qr-tip">二维码失效后会自动刷新，也可以点「刷新二维码」立即换一张。</p>
+            <p class="qr-count" id="q-count"></p>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  $("#q-inst", view).addEventListener("change", (e) => {
+    state.qrInst = e.target.value;
+    fetchQr(view);
+  });
+  $("#q-start", view).addEventListener("click", () => startQr(view));
+  $("#q-refresh", view).addEventListener("click", () => fetchQr(view, false, true));
+  await fetchQr(view);
+  clearQrTimer();
+  state.qrTimer = setInterval(() => fetchQr(view, true), 3000);
+}
+
+async function startQr(view, instId = state.qrInst) {
+  const btn = $("#q-start", view);
+  if (btn) btn.disabled = true;
+  try {
+    const data = await api(`/api/instances/${instId}/napcat/login`, { method: "POST" });
+    toast(data.message || "NapCat 正在启动", "ok");
+    await fetchQr(view, false, false, instId);
+  } catch (err) {
+    toast(err.message, "err");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function fetchQr(view, quiet = false, force = false, instId = state.qrInst) {
+  const box = $("#q-img", view);
+  if (!box) return;
+  const pill = $("#q-pill", view);
+  const title = $("#q-title", view);
+  const msg = $("#q-msg", view);
+  const count = $("#q-count", view);
+  try {
+    const data = await api(`/api/instances/${instId}/napcat/qrcode${force ? "?refresh=1" : ""}`);
+    if (data.logged_in) {
+      pill.className = "qr-pill ok";
+      pill.textContent = "已登录";
+      title.textContent = "QQ 已登录";
+      msg.textContent = data.qq ? `账号 ${data.qq} 在线，无需扫码。` : "机器人已登录，无需扫码。";
+      box.dataset.src = "";
+      box.innerHTML = `<div class="qr-done">${icon("check")}<span>已登录</span></div>`;
+      count.textContent = "";
+      return;
+    }
+    if (!data.running) {
+      pill.className = "qr-pill warn";
+      pill.textContent = "未运行";
+      title.textContent = "NapCat 未运行";
+      msg.textContent = data.message || "点击「启动并扫码」在后台启动 NapCat。";
+      box.dataset.src = "";
+      box.innerHTML = `<span class="empty">${esc(data.message || "NapCat 未运行")}</span>`;
+      count.textContent = "";
+      return;
+    }
+    pill.className = "qr-pill live";
+    pill.textContent = "等待扫码";
+    title.textContent = data.phase === "qrcode_scanned" ? "已扫码，等待确认" : "等待扫码";
+    msg.textContent = data.message || "请使用手机 QQ 扫码登录";
+    if (data.qrcode) {
+      if (box.dataset.src !== data.qrcode || !box.querySelector("img")) {
+        box.dataset.src = data.qrcode;
+        box.innerHTML = `<img src="${esc(data.qrcode)}" alt="QQ 登录二维码">`;
+      }
+      count.textContent = data.refresh_in > 0 ? `二维码约 ${data.refresh_in} 秒后自动刷新` : "正在自动刷新二维码…";
+    } else {
+      box.dataset.src = "";
+      box.innerHTML = `<span class="empty">正在生成二维码…</span>`;
+      count.textContent = "";
+    }
+  } catch (err) {
+    if (pill) { pill.className = "qr-pill warn"; pill.textContent = "连接失败"; }
+    if (!quiet) {
+      box.dataset.src = "";
+      box.innerHTML = `<span class="empty">${esc(err.message)}</span>`;
+    }
+  }
+}
+
+
 /* ----------------------------------------------------------------- logs */
 
 function clearLogTimer() {
@@ -3234,6 +3427,7 @@ async function viewLogs(view) {
       </select>
       <button class="chip ${state.logSource === "bot" ? "active" : ""}" data-src="bot">机器人日志</button>
       <button class="chip ${state.logSource === "console" ? "active" : ""}" data-src="console">启动控制台</button>
+      <button class="chip ${state.logSource === "napcat" ? "active" : ""}" data-src="napcat">NapCat 控制台</button>
       <div class="spacer"></div>
       <label class="checkline"><input type="checkbox" id="l-auto" ${state.logAuto ? "checked" : ""}>自动刷新</label>
       <button class="btn sm ghost" id="l-refresh">${icon("refresh")}刷新</button>
@@ -3631,7 +3825,7 @@ async function viewSettings(view) {
     <div class="card" style="margin-top:18px">
       <div class="section-head" style="margin:0 0 14px"><h2>关于</h2></div>
       <div class="kv">
-        <div class="row-item"><span class="k">管理器</span><span class="v">牧鱼 v1.23.11</span></div>
+        <div class="row-item"><span class="k">管理器</span><span class="v">牧鱼 v1.23.12</span></div>
         <div class="row-item"><span class="k">运行方式</span><span class="v">本地 FastAPI + 桌面外壳（pywebview / Edge App）</span></div>
         <div class="row-item"><span class="k">登录凭据</span><span class="v">保存于 data/instances.json，仅本机可见</span></div>
       </div>

@@ -82,7 +82,7 @@ test("missing local capabilities can be installed in one click", () => {
 test("shell and service worker ship the new assets", () => {
   assert.match(indexHtml, /deploy\.css\?v=/);
   assert.match(indexHtml, /deploy\.js\?v=/);
-  assert.match(swJs, /fleet-shell-v1\.23\.11/);
+  assert.match(swJs, /fleet-shell-v1\.23\.12/);
   assert.match(swJs, /\/assets\/deploy\.js/);
   assert.match(swJs, /\/assets\/deploy\.css/);
 });

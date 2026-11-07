@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import fleet_store, store, tasks as tasks_mod
 
-VERSION = "1.23.11"
+VERSION = "1.23.12"
 DSH_CACHE_SECONDS = 15.0
 
 # 可按 id 补种的内置任务；已有同名任务时只补齐缺失项，不覆盖用户配置。

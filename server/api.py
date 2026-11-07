@@ -49,6 +49,7 @@ from . import (
     memory,
     memory_audit,
     mood as mood_mod,
+    napcat as napcat_mod,
     notify as notify_mod,
     persona as persona_mod,
     presence as presence_mod,
@@ -73,7 +74,7 @@ from .store import (
     seed_instances,
 )
 
-app = FastAPI(title="牧鱼", version="1.23.11")
+app = FastAPI(title="牧鱼", version="1.23.12")
 runner = runner_mod.runner
 watchdog = watchdog_mod.watchdog
 app.include_router(dsh_mod.router)
@@ -1303,9 +1304,9 @@ def _start_flow(inst: dict, restart: bool = False) -> tuple[dict, str]:
                 creator.sync_napcat(inst)
                 launched = runner.start_napcat(inst)
                 napcat_note = (
-                    "NapCat 已在运行，请在 QQ 窗口确认已登录"
+                    "NapCat 已在运行，请在「扫码 / 控制台」页确认登录状态"
                     if launched.get("already")
-                    else "已同时启动 NapCat，请在弹出的窗口完成 QQ 登录（登录成功后消息才会回复）"
+                    else "已同时启动 NapCat，请打开「扫码 / 控制台」页扫码登录（登录成功后消息才会回复）"
                 )
             except Exception as exc:  # noqa: BLE001
                 napcat_note = f"NapCat 启动失败：{exc}"
@@ -1373,8 +1374,36 @@ def start_napcat(inst_id: str):
     except runner_mod.RunnerError as exc:
         return _fail(str(exc))
     if result.get("already"):
-        return _ok(result, "NapCat 已在运行，请在 QQ 窗口确认已登录")
-    return _ok(result, "NapCat 已启动，请在弹出的窗口完成 QQ 登录")
+        return _ok(result, "NapCat 已在运行，可在「扫码登录」页查看二维码")
+    return _ok(result, "NapCat 已在后台启动，请打开「扫码登录」页完成 QQ 登录")
+
+
+@app.post("/api/instances/{inst_id}/napcat/login")
+def napcat_login(inst_id: str):
+    """启动 NapCat（无窗口）并返回当前二维码/登录状态。"""
+    inst = _require(_instances(), inst_id)
+    if not Path(inst.get("napcat_dir") or "").is_dir():
+        return _fail("请先在设置里填写有效的 NapCat 目录")
+    try:
+        creator.sync_napcat(inst)
+        result = runner.start_napcat(inst)
+        state = napcat_mod.login_state(inst)
+    except runner_mod.RunnerError as exc:
+        return _fail(str(exc))
+    except napcat_mod.NapCatError as exc:
+        return _fail(str(exc), 502)
+    message = "NapCat 已在后台运行，二维码生成后自动显示" if result.get("already") else "NapCat 正在后台启动，请稍候"
+    return _ok(state, message)
+
+
+@app.get("/api/instances/{inst_id}/napcat/qrcode")
+def napcat_qrcode(inst_id: str, refresh: int = 0):
+    """轮询扫码状态；refresh=1 时立即换一张新二维码。"""
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(napcat_mod.login_state(inst, force_refresh=bool(refresh)))
+    except napcat_mod.NapCatError as exc:
+        return _fail(str(exc), 502)
 
 
 @app.get("/api/instances/{inst_id}/logs")
@@ -1384,10 +1413,12 @@ def instance_logs(inst_id: str, lines: int = 200, source: str = "bot"):
     data_dir = Path(inst["root"]) / "data" / "logs"
     if source == "console":
         path = data_dir / "manager-console.log"
+    elif source == "napcat":
+        path = data_dir / "napcat-console.log"
     else:
         path = data_dir / "astrbot.log"
     text = runner_mod.tail(path, lines)
-    if not text and source != "console":
+    if not text and source == "bot":
         # AstrBot 默认只往控制台输出，没有 astrbot.log 时回退到管理器捕获的控制台日志
         console = data_dir / "manager-console.log"
         fallback = runner_mod.tail(console, lines)

@@ -28,7 +28,7 @@ test("frontend shell loads new modules with cache query", () => {
   for (const name of ["tasks.js", "digest.js", "eval.js", "automation.css", "automation_center.js", "deploy.js", "deploy.css"]) {
     assert.match(html, new RegExp(`/assets/${name.replace(".", "\\.")}\\?v=`));
   }
-  assert.match(html, /v1\.23\.11/);
+  assert.match(html, /v1\.23\.12/);
 });
 
 test("automation center calls monitoring APIs", () => {

@@ -268,7 +268,7 @@
             </aside>
           </div>
           ${enhancePanel()}
-          <footer class="deploy-foot">牧鱼 v1.23.11 · 部署过程只在本机执行，API Key 仅写入本地实例配置</footer>
+          <footer class="deploy-foot">牧鱼 v1.23.12 · 部署过程只在本机执行，API Key 仅写入本地实例配置</footer>
         </div>`;
     }
 

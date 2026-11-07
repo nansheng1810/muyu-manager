@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import subprocess
 import threading
 import time
 from datetime import datetime
@@ -16,8 +15,8 @@ from pathlib import Path
 from . import store
 from .runner import (
     established_connections,
-    find_napcat_bat,
     napcat_process_running,
+    runner,
 )
 
 POLL_INTERVAL = 20.0        # 轮询周期（秒）
@@ -28,8 +27,6 @@ RELOGIN_COOLDOWN = 900.0    # 两次自动重登的最小间隔（秒）
 
 LOG_PATH = store.DATA_DIR / "watchdog.log"
 LOG_MAX_BYTES = 512 * 1024  # 超过即截断，只保留尾部
-
-CREATE_NEW_CONSOLE = 0x00000010
 
 
 def _rotate_log() -> None:
@@ -184,7 +181,7 @@ class Watchdog:
                 self._relogin(inst, watch, napcat_dir)
 
     def _relogin(self, inst: dict, watch: _Watch, napcat_dir: Path) -> None:
-        from .runner import kill_napcat_processes, napcat_boot_command, runner
+        from .runner import kill_napcat_processes
 
         name = inst.get("name") or inst.get("id")
         watch.last_relogin = time.time()
@@ -194,41 +191,11 @@ class Watchdog:
             if killed:
                 _log(f"[{name}] 已结束 {killed} 个残留进程")
                 time.sleep(3)
-            bat = find_napcat_bat(napcat_dir, str(inst.get("qq") or ""))
-            if bat is None:
-                boot = napcat_dir / "NapCatWinBootMain.exe"
-                if not boot.is_file():
-                    watch.stage = "qrcode"
-                    watch.note = "未找到快速登录入口，无法自动登录"
-                    _log(f"[{name}] {watch.note}")
-                    return
-                qq = str(inst.get("qq") or "").strip()
-                subprocess.Popen(
-                    napcat_boot_command(boot, qq),
-                    cwd=str(napcat_dir),
-                    creationflags=CREATE_NEW_CONSOLE,
-                )
-            else:
-                # 直接走引导器：bat 里的 pause 会挂住 cmd /c，
-                # NapCatWinBootMain 前台拉起更可靠；先切 UTF-8 代码页避免中文乱码。
-                boot = bat.parent / "NapCatWinBootMain.exe"
-                if not boot.is_file():
-                    boot = napcat_dir / "NapCatWinBootMain.exe"
-                qq = str(inst.get("qq") or "").strip()
-                if boot.is_file() and qq:
-                    subprocess.Popen(
-                        napcat_boot_command(boot, qq), cwd=str(boot.parent),
-                        creationflags=CREATE_NEW_CONSOLE,
-                    )
-                else:
-                    subprocess.Popen(
-                        ["cmd.exe", "/c", bat.name], cwd=str(bat.parent),
-                        creationflags=CREATE_NEW_CONSOLE,
-                    )
+            runner.start_napcat(inst)
             watch.stage = "relogin"
             watch.stage_since = time.time()
-            watch.note = "已执行快速登录，等待重连"
-            _log(f"[{name}] 已执行快速登录，等待重连")
+            watch.note = "已在后台执行快速登录，等待重连"
+            _log(f"[{name}] 已执行快速登录，二维码可在「扫码登录」页查看")
         except Exception as exc:  # noqa: BLE001
             watch.stage = "qrcode"
             watch.note = f"快速登录执行失败：{exc}"

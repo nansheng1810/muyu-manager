@@ -1,5 +1,5 @@
 /* AstrBot 舰队管理器 PWA：缓存静态壳，API 始终走网络。 */
-const CACHE_NAME = "fleet-shell-v1.23.11";
+const CACHE_NAME = "fleet-shell-v1.23.12e";
 const SHELL = [
   "/",
   "/assets/style.css",

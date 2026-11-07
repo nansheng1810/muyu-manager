@@ -15,10 +15,10 @@ test("app identity uses the Muyu name", () => {
   assert.match(html, /<title>牧鱼 · AstrBot 多机管理台<\/title>/);
   assert.match(html, /<strong>牧鱼<\/strong>/);
   assert.match(html, /<span>AstrBot 多机管理台<\/span>/);
-  assert.match(html, /v1\.23\.11 · 本地运行/);
+  assert.match(html, /v1\.23\.12 · 本地运行/);
 
   const app = fs.readFileSync(path.join(root, "web/assets/app.js"), "utf8");
-  assert.match(app, /牧鱼 v1\.23\.11/);
+  assert.match(app, /牧鱼 v1\.23\.12/);
 
   const api = fs.readFileSync(path.join(root, "server/api.py"), "utf8");
   assert.match(api, /FastAPI\(title="牧鱼"/);
@@ -51,6 +51,29 @@ test("desktop shell uses a custom frameless titlebar", () => {
 
   const css = fs.readFileSync(path.join(root, "web/assets/style.css"), "utf8");
   assert.match(css, /html\.desktop-shell \.app-titlebar \{ display: flex; \}/);
+});
+
+test("napcat login is embedded in the manager with auto refresh", () => {
+  const app = fs.readFileSync(path.join(root, "web/assets/app.js"), "utf8");
+  assert.match(app, /qqlogin:/);
+  assert.match(app, /viewQrLogin/);
+  assert.match(app, /renderBotLoginTab/);
+  assert.match(app, /\["login", "扫码 \/ 控制台"\]/);
+  assert.match(app, /\/napcat\/qrcode/);
+  assert.match(app, /state\.qrTimer = setInterval/);
+  assert.match(app, /data-src="napcat"/);
+
+  const api = fs.readFileSync(path.join(root, "server/api.py"), "utf8");
+  assert.match(api, /\/napcat\/login/);
+  assert.match(api, /source == "napcat"/);
+
+  const napcat = fs.readFileSync(path.join(root, "server/napcat.py"), "utf8");
+  assert.match(napcat, /\.napcat/);
+  assert.match(napcat, /GetQQLoginQrcode|RefreshQRcode|CheckLoginStatus/);
+
+  const runner = fs.readFileSync(path.join(root, "server/runner.py"), "utf8");
+  assert.match(runner, /CREATE_NO_WINDOW/);
+  assert.doesNotMatch(runner, /CREATE_NEW_CONSOLE/);
 });
 
 test("new chubby-fish icon replaces the old blue-purple gradient mark", () => {

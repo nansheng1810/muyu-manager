@@ -12,7 +12,7 @@ from pathlib import Path
 
 from . import creator, dashboard, fleet_store, runner, store
 
-VERSION = "1.23.11"
+VERSION = "1.23.12"
 
 # 预设厂商：全部走 OpenAI 兼容接口，AstrBot 侧统一使用 openai 提供器。
 # 模型名为 2026 年当前在线的型号；填入 Key 后可用「检测模型」拉取账号真实可用列表。
