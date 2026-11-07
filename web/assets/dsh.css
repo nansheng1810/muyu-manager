@@ -1,0 +1,668 @@
+/* DSH 页：运行态、市场卡片、接入卡片 */
+
+.dsh-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 24px;
+}
+
+.dsh-runtime {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+}
+
+.dsh-runtime-id {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.dsh-runtime-mark {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-2);
+  border-radius: 11px;
+  background: var(--panel-2);
+  color: var(--accent-text);
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.dsh-runtime-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.dsh-runtime-title h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.dsh-runtime p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.dsh-runtime .dsh-runtime-note {
+  color: var(--dim);
+  font-size: 11.5px;
+}
+
+.dsh-runtime .dsh-runtime-error {
+  color: var(--bad-text);
+}
+
+.dsh-runtime-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.dsh-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.dsh-state i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.dsh-state.ok {
+  color: var(--ok-text);
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
+}
+
+.dsh-state.warn {
+  color: var(--warn-text);
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+}
+
+.dsh-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 12px;
+}
+
+.dsh-search {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  align-items: center;
+}
+
+.dsh-search .icon {
+  position: absolute;
+  left: 11px;
+  width: 15px;
+  height: 15px;
+  color: var(--dim);
+  pointer-events: none;
+}
+
+.dsh-search input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px 0 34px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.dsh-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.dsh-select {
+  height: 34px;
+  max-width: 160px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.dsh-seg {
+  flex: none;
+}
+
+.dsh-seg .seg-btn {
+  height: 34px;
+  font-size: 12px;
+}
+
+.dsh-tip {
+  padding: 9px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  color: var(--dim);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.dsh-tip code,
+.dsh-help-copy code,
+.dsh-command-help code {
+  color: var(--accent-text);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.dsh-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dsh-result-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+
+.dsh-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 10px;
+}
+
+.dsh-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 176px;
+  padding: 14px 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-1);
+}
+
+.dsh-card:hover {
+  border-color: var(--line-2);
+}
+
+.dsh-card-installed {
+  min-height: 0;
+}
+
+.dsh-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.dsh-monogram {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.dsh-card-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.dsh-card-title h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-card-title p {
+  margin: 3px 0 0;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dsh-card-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--dim);
+  font-size: 10.8px;
+  margin-top: auto;
+}
+
+.dsh-star {
+  color: var(--warn-text);
+}
+
+.dsh-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+}
+
+.dsh-card-actions .btn {
+  flex: none;
+}
+
+.dsh-link {
+  color: var(--accent-text);
+  font-size: 11.5px;
+  text-decoration: none;
+}
+
+.dsh-link:hover {
+  text-decoration: underline;
+}
+
+.dsh-spec {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.dsh-pager {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 0 0;
+}
+
+.dsh-empty {
+  padding: 46px 20px;
+}
+
+.dsh-empty .btn {
+  margin-top: 4px;
+}
+
+.dsh-bodycard {
+  padding: 14px;
+}
+
+.dsh-job {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-border);
+  border-radius: 10px;
+  background: var(--accent-bg);
+}
+
+.dsh-job > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dsh-job b {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.dsh-job span {
+  color: var(--muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-job.ok {
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
+}
+
+.dsh-job.bad {
+  border-color: var(--bad-border);
+  background: var(--bad-bg);
+}
+
+.dsh-progress {
+  flex: 0 0 160px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--panel-2);
+}
+
+.dsh-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.dsh-access-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+}
+
+.dsh-access-note > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.dsh-access-note .icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent-text);
+}
+
+.dsh-access-note b {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.dsh-access-note p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.dsh-instances {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 10px;
+}
+
+.dsh-instance {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-1);
+}
+
+.dsh-instance-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.dsh-instance-mark {
+  width: 38px;
+  height: 38px;
+}
+
+.dsh-kv {
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+
+.dsh-kv > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11.5px;
+}
+
+.dsh-kv span {
+  color: var(--dim);
+  flex: none;
+}
+
+.dsh-kv b {
+  color: var(--muted);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-all;
+}
+
+.dsh-good {
+  color: var(--ok-text) !important;
+}
+
+.dsh-warn-text {
+  color: var(--warn-text) !important;
+}
+
+.dsh-warn {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--warn-border);
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.dsh-instance-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.dsh-instance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: auto;
+}
+
+.dsh-command-help {
+  padding: 16px 18px;
+}
+
+.dsh-command-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 9px;
+}
+
+.dsh-command-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.dsh-command-grid code {
+  font-size: 11.5px;
+}
+
+.dsh-command-grid span {
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.dsh-help-copy {
+  margin: 12px 0 0;
+  color: var(--dim);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.dsh-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dsh-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.dsh-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dsh-form input,
+.dsh-form select {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.dsh-form input:focus,
+.dsh-form select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.dsh-form .dsh-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.dsh-form .dsh-check input {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.dsh-logbox {
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+
+.dsh-logbox pre {
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.dsh-runtime-failed {
+  border-color: var(--bad-border);
+}
+
+@media (max-width: 900px) {
+  .dsh-runtime,
+  .dsh-toolbar,
+  .dsh-access-note {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dsh-runtime-actions {
+    justify-content: flex-start;
+  }
+
+  .dsh-search {
+    min-width: 0;
+  }
+
+  .dsh-instances {
+    grid-template-columns: 1fr;
+  }
+
+  .dsh-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dsh-progress {
+    flex: 0 0 90px;
+  }
+}
