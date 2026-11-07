@@ -3940,3 +3940,65 @@ window.addEventListener("hashchange", () => navigate());
     $("#view").innerHTML = `<div class="empty">${icon("alert")}<h4>无法连接管理服务</h4><p>${esc(err.message)}</p></div>`;
   }
 })();
+
+
+/* ---------------------------------------------------- 自定义窗口标题栏 */
+
+(function desktopTitlebar() {
+  const root = document.documentElement;
+  const bar = document.getElementById("app-titlebar");
+  if (!bar) return;
+
+  const btnMin = document.getElementById("win-min");
+  const btnMax = document.getElementById("win-max");
+  const btnClose = document.getElementById("win-close");
+  const dragZones = bar.querySelectorAll(".pywebview-drag-region");
+  let bound = false;
+
+  function call(name, ...args) {
+    try {
+      const api = window.pywebview && window.pywebview.api;
+      if (!api || typeof api[name] !== "function") return Promise.resolve(undefined);
+      const result = api[name](...args);
+      if (result && typeof result.catch === "function") result.catch(() => {});
+      return Promise.resolve(result);
+    } catch (err) {
+      return Promise.resolve(undefined);
+    }
+  }
+
+  function setMaximized(maximized) {
+    const use = btnMax.querySelector("use");
+    if (use) use.setAttribute("href", maximized ? "#i-win-restore" : "#i-win-max");
+    const label = maximized ? "还原" : "最大化";
+    btnMax.title = label;
+    btnMax.setAttribute("aria-label", label);
+  }
+
+  async function syncMaximized() {
+    setMaximized(Boolean(await call("is_maximized")));
+  }
+
+  async function toggleMaximized() {
+    setMaximized(Boolean(await call("toggle_maximize")));
+  }
+
+  function bind() {
+    if (bound || !window.pywebview || !window.pywebview.api) return;
+    bound = true;
+    root.classList.add("desktop-shell");
+    btnMin.addEventListener("click", () => call("minimize"));
+    btnMax.addEventListener("click", () => toggleMaximized());
+    btnClose.addEventListener("click", () => call("close"));
+    dragZones.forEach((zone) => zone.addEventListener("dblclick", () => toggleMaximized()));
+    let timer = 0;
+    window.addEventListener("resize", () => {
+      clearTimeout(timer);
+      timer = setTimeout(syncMaximized, 120);
+    });
+    syncMaximized();
+  }
+
+  if (window.pywebview && window.pywebview.api) bind();
+  else window.addEventListener("pywebviewready", bind, { once: true });
+})();

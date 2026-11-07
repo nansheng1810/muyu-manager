@@ -33,6 +33,26 @@ test("app identity uses the Muyu name", () => {
   assert.match(bat, /title 牧鱼/);
 });
 
+test("desktop shell uses a custom frameless titlebar", () => {
+  const html = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
+  assert.match(html, /class="app-titlebar"/);
+  assert.match(html, /id="win-min"/);
+  assert.match(html, /id="win-max"/);
+  assert.match(html, /id="win-close"/);
+
+  const app = fs.readFileSync(path.join(root, "web/assets/app.js"), "utf8");
+  assert.match(app, /pywebviewready/);
+  assert.match(app, /toggle_maximize/);
+
+  const launcher = fs.readFileSync(path.join(root, "launcher.py"), "utf8");
+  assert.match(launcher, /frameless=True/);
+  assert.match(launcher, /easy_drag=False/);
+  assert.match(launcher, /js_api=api/);
+
+  const css = fs.readFileSync(path.join(root, "web/assets/style.css"), "utf8");
+  assert.match(css, /html\.desktop-shell \.app-titlebar \{ display: flex; \}/);
+});
+
 test("new chubby-fish icon replaces the old blue-purple gradient mark", () => {
   const svg = fs.readFileSync(path.join(root, "web/assets/favicon.svg"), "utf8");
   for (const color of ["#0E1A17", "#F1E8D7", "#63B7A4"]) {

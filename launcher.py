@@ -20,6 +20,118 @@ sys.path.insert(0, str(ROOT))
 
 LOG_PATH = ROOT / "data" / "logs" / "manager.log"
 PORTS = range(7311, 7341)
+TITLE = "牧鱼 · AstrBot 多机管理台"
+
+
+def window_handle(window=None) -> int:
+    """优先取 pywebview 窗体的顶层 HWND，取不到时按窗口标题查找。"""
+    if sys.platform != "win32":
+        return 0
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        native = getattr(window, "native", None) if window is not None else None
+        if native is not None:
+            handle = getattr(native, "Handle", None)
+            value = int(handle.ToInt32()) if handle is not None else 0
+            if value:
+                root = int(user32.GetAncestor(value, 2) or value)  # GA_ROOT
+                buf = ctypes.create_unicode_buffer(256)
+                user32.GetWindowTextW(root, buf, 256)
+                if buf.value:
+                    return root
+            return 0
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import ctypes
+
+        return int(ctypes.windll.user32.FindWindowW(None, TITLE))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def enable_native_resize(window, timeout: float = 15.0) -> None:
+    """无边框窗口会丢失系统缩放边框，这里通过 Win32 样式补回。"""
+    if sys.platform != "win32":
+        return
+    deadline = time.time() + timeout
+    hwnd = 0
+    while time.time() < deadline:
+        # 必须等 pywebview 真正生成窗体后再取句柄，避免误抓到旧窗口
+        if getattr(window, "native", None) is not None:
+            hwnd = window_handle(window)
+            if hwnd:
+                break
+        time.sleep(0.1)
+    if not hwnd:
+        log("未找到窗口句柄，跳过缩放边框恢复")
+        return
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        style = user32.GetWindowLongW(hwnd, -16)
+        user32.SetWindowLongW(
+            hwnd,
+            -16,
+            style | 0x00040000 | 0x00010000 | 0x00020000 | 0x00080000,  # THICKFRAME | MAXIMIZEBOX | MINIMIZEBOX | SYSMENU
+        )
+        user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0027)  # FRAMECHANGED | NOMOVE | NOSIZE | NOZORDER
+        log(f"已恢复无边框窗口的缩放边框（句柄 {hwnd}）")
+    except Exception as exc:  # noqa: BLE001
+        log(f"恢复缩放边框失败：{exc}")
+
+
+class WindowApi:
+    """供前端自定义标题栏调用的窗口控制 API。"""
+
+    def __init__(self) -> None:
+        self._window = None
+
+    def bind(self, window) -> None:
+        self._window = window
+
+    def minimize(self) -> bool:
+        if self._window:
+            self._window.minimize()
+        return True
+
+    def is_maximized(self) -> bool:
+        hwnd = window_handle(self._window)
+        if not hwnd:
+            return False
+        try:
+            import ctypes
+
+            return bool(ctypes.windll.user32.IsZoomed(hwnd))
+        except Exception:  # noqa: BLE001
+            return False
+
+    def toggle_maximize(self) -> bool:
+        if not self._window:
+            return False
+        hwnd = window_handle(self._window)
+        if hwnd:
+            try:
+                import ctypes
+
+                # SW_RESTORE = 9, SW_MAXIMIZE = 3
+                ctypes.windll.user32.ShowWindow(hwnd, 9 if self.is_maximized() else 3)
+                return self.is_maximized()
+            except Exception:  # noqa: BLE001
+                pass
+        if self.is_maximized():
+            self._window.restore()
+        else:
+            self._window.maximize()
+        return self.is_maximized()
+
+    def close(self) -> bool:
+        if self._window:
+            self._window.destroy()
+        return True
 
 
 def hide_console() -> None:
@@ -119,16 +231,22 @@ def main() -> None:
     try:
         import webview
 
+        api = WindowApi()
         window = webview.create_window(
-            "牧鱼 · AstrBot 多机管理台",
+            TITLE,
             url,
             width=1480,
             height=940,
             min_size=(1120, 720),
             background_color="#070a10",
             text_select=True,
+            frameless=True,
+            easy_drag=False,
+            js_api=api,
         )
-        log("使用 pywebview 窗口")
+        api.bind(window)
+        threading.Thread(target=enable_native_resize, args=(window,), daemon=True, name="window-frame").start()
+        log("使用 pywebview 无边框窗口")
         webview.start(debug=False)
         return
     except Exception as exc:  # noqa: BLE001

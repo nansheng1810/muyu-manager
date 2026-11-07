@@ -14,7 +14,7 @@
 <link rel="icon" href="/assets/favicon.svg?v=20261105d" type="image/svg+xml" />
 <link rel="manifest" href="/manifest.webmanifest" />
 <meta name="theme-color" content="#05070d" />
-<link rel="stylesheet" href="/assets/style.css?v=20261105d" />
+<link rel="stylesheet" href="/assets/style.css?v=20261107h" />
 <link rel="stylesheet" href="/assets/consoles.css?v=20261105d" />
 <link rel="stylesheet" href="/assets/memory.css?v=20261105d" />
 <link rel="stylesheet" href="/assets/dsh.css?v=20261105d" />
@@ -57,7 +57,25 @@
   <symbol id="i-sun" viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM11 2h2v3h-2V2Zm0 17h2v3h-2v-3ZM2 11h3v2H2v-2Zm17 0h3v2h-3v-2ZM4.2 5.6l1.4-1.4 2.1 2.1-1.4 1.4-2.1-2.1Zm12.1 12.1 1.4-1.4 2.1 2.1-1.4 1.4-2.1-2.1Zm2.1-13.5 1.4 1.4-2.1 2.1-1.4-1.4 2.1-2.1ZM6.3 16.3l1.4 1.4-2.1 2.1-1.4-1.4 2.1-2.1Z"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12.3 2a9 9 0 0 0 9.7 11.4A10 10 0 1 1 12.3 2Z"/></symbol>
   <symbol id="i-fish" viewBox="0 0 24 24"><path d="M2 12c3.2-4.4 7-6.6 11-6.6 3.2 0 6.1 1.2 8.7 3.9L22 12l-.3 2.7c-2.6 2.7-5.5 3.9-8.7 3.9-4 0-7.8-2.2-11-6.6Zm5.2-.7a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6ZM17 9.5l3.7 2.5L17 14.5v-5Z"/></symbol>
+  <symbol id="i-win-min" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="2" rx="0.5"/></symbol>
+  <symbol id="i-win-max" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="i-win-restore" viewBox="0 0 24 24"><rect x="8.5" y="5.5" width="9" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="5.5" y="8.5" width="9" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-win-close" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
 </svg>
+
+<header class="app-titlebar" id="app-titlebar" aria-label="窗口标题栏">
+  <div class="app-titlebar-brand pywebview-drag-region">
+    <img src="/assets/favicon.svg?v=20261105d" alt="" />
+    <span>牧鱼</span>
+    <small>AstrBot 多机管理台</small>
+  </div>
+  <div class="app-titlebar-drag pywebview-drag-region" id="app-titlebar-drag"></div>
+  <div class="app-titlebar-controls">
+    <button type="button" id="win-min" title="最小化" aria-label="最小化"><svg class="icon"><use href="#i-win-min"/></svg></button>
+    <button type="button" id="win-max" title="最大化" aria-label="最大化"><svg class="icon"><use href="#i-win-max"/></svg></button>
+    <button type="button" class="win-close" id="win-close" title="关闭" aria-label="关闭"><svg class="icon"><use href="#i-win-close"/></svg></button>
+  </div>
+</header>
 
 <aside class="sidebar">
   <div class="brand">
@@ -138,7 +156,7 @@
 <script src="/assets/ia.js?v=20261107d" defer></script>
 <script src="/assets/automation_center.js?v=20261107d" defer></script>
 <script src="/assets/deploy.js?v=20261107g" defer></script>
-<script src="/assets/app.js?v=20261107g" defer></script>
+<script src="/assets/app.js?v=20261107h" defer></script>
 <script>
   if ("serviceWorker" in navigator && (location.protocol === "http:" || location.protocol === "https:")) {
     window.addEventListener("load", () => {
