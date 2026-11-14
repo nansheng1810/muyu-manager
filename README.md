@@ -42,7 +42,7 @@
 </td>
 <td width="50%" valign="top">
 
-### 🛰️ 多实例舰队
+### 🛰️ 多实例统管
 创建、导入、发现实例；启停重启、端口分配、Dashboard 免密直达、NapCat 状态监控与自动重连，一台管理器管一片。
 
 </td>
@@ -88,7 +88,7 @@ bili-cli 扫码登录、自动发布参数、本地视频手动投稿与投稿�
 | :--- | :--- |
 | 🚀 **部署** | 首屏只填 API Key · 自动拉取模型列表 · 一键创建机器人 · 下载失败自动切镜像 |
 | 🗂️ **实例** | 创建 / 导入 / 发现 · 启停与重启 · 端口分配 · Dashboard 免密直达 · NapCat 自动重连 |
-| 📊 **监控** | 舰队总览 · 健康检查 · 告警 · 任务调度 · 审批 · 备份与运维面板 |
+| 📊 **监控** | 实例总览 · 健康检查 · 告警 · 任务调度 · 审批 · 备份与运维面板 |
 | 💬 **消息中心** | QQ / B 站消息收件箱 · 自动回复与人工审核 · 双机对话 · 群聊增强 |
 | 🎭 **拟人化** | 长期记忆 · 人物档案 · 在场状态 · 心情与行为节奏 · 人格风格 · 表情包 · 看图接话 |
 | 🎙️ **语音** | 驰风 Breeze TTS · 音色设计 · 声音克隆 · 试听 · 人声预设增删改 · 音色锁定 · 合成缓存 LRU |
@@ -105,7 +105,7 @@ flowchart LR
     U(["🖥️ 你"]) --> W["牧鱼窗口<br/>pywebview / 浏览器"]
     W --> API["FastAPI<br/>127.0.0.1:7311+"]
     API --> WEB["web/ 原生前端<br/>无构建 · PWA"]
-    API --> FLEET["舰队存储<br/>instances.json"]
+    API --> FLEET["实例存储<br/>instances.json"]
     API --> OPS["运维库<br/>fleet_ops.sqlite3"]
     API --> INST1["AstrBot 实例 A"]
     API --> INST2["AstrBot 实例 B"]
@@ -193,7 +193,7 @@ py -3.12 -m venv .venv
 
 ## 🔐 数据与安全
 
-运行数据统一存放：
+运行数据统一存放（目录名由程序固定使用，请勿改名）：
 
 ```text
 %LOCALAPPDATA%\AstrBot舰队管理器\data
@@ -299,6 +299,6 @@ tests/                         Python unittest 与 Node 内置测试
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=0:a855f7,50:6366f1,100:0ea5e9&height=120&section=footer" alt="footer" />
 
-<sub>🐟 牧鱼 · 把整支 AstrBot 舰队装进一个窗口</sub>
+<sub>🐟 牧鱼 · 把所有 AstrBot 实例装进一个窗口</sub>
 
 </div>
