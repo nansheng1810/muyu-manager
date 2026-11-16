@@ -123,8 +123,12 @@
         fillSelects(view);
         return;
       }
-      if (!instanceId || !state.instances.some((item) => item.id === instanceId)) {
-        instanceId = state.instances[0].id;
+      const focusHit = globalThis.ManagerFocus && globalThis.ManagerFocus.consume(state.instances);
+      if (focusHit) {
+        if (String(instanceId) !== String(focusHit.id)) reset = true;
+        instanceId = String(focusHit.id);
+      } else if (!instanceId || !state.instances.some((item) => item.id === instanceId)) {
+        instanceId = ((globalThis.ManagerFocus && globalThis.ManagerFocus.pick(state.instances)) || state.instances[0]).id;
         reset = true;
       }
       if (reset) {
@@ -279,7 +283,7 @@
         view.innerHTML = `<div class="empty">${icon("model")}<h4>没有可用实例</h4><p>请先新增或接入机器人。</p></div>`;
         return;
       }
-      instanceId = instanceId || state.instances[0].id;
+      instanceId = instanceId || ((globalThis.ManagerFocus && globalThis.ManagerFocus.pick(state.instances)) || state.instances[0]).id;
       view.innerHTML = `
         <div class="auto-toolbar">
           <div class="left">

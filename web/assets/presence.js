@@ -147,7 +147,9 @@
           emptyInstances(view);
           return false;
         }
-        if (!instId || !instances.some((item) => item.id === instId)) instId = instances[0].id;
+        const focusHit = globalThis.ManagerFocus && globalThis.ManagerFocus.consume(instances);
+        if (focusHit) instId = String(focusHit.id);
+        else if (!instId || !instances.some((item) => item.id === instId)) instId = ((globalThis.ManagerFocus && globalThis.ManagerFocus.pick(instances)) || instances[0]).id;
         const select = view.querySelector("#presence-inst");
         if (select) {
           select.innerHTML = instances

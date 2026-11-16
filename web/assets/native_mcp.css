@@ -1,0 +1,118 @@
+/* 牧鱼 · 原生 MCP */
+.nmcp-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.nmcp-hero h2 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+.nmcp-hero p { margin: 5px 0 0; color: var(--muted); font-size: 12.5px; }
+.nmcp-hero-actions { display: flex; gap: 8px; }
+.nmcp-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.nmcp-panel { padding: 16px; min-width: 0; }
+.nmcp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+.nmcp-head h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 7px; }
+.nmcp-head .icon { width: 16px; height: 16px; color: var(--accent); }
+.nmcp-muted { margin: 0 0 10px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.nmcp-warn { margin: 9px 0 0; color: var(--warn-text); font-size: 12px; line-height: 1.65; }
+.nmcp-error { margin: 9px 0 0; color: var(--bad-text); font-size: 12px; line-height: 1.65; }
+.nmcp-kv {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 6px 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.nmcp-kv span { color: var(--muted); }
+.nmcp-kv b { font-weight: 500; overflow-wrap: anywhere; }
+.nmcp-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+.nmcp-endpoints { display: grid; gap: 8px; margin: 10px 0; }
+.nmcp-endpoint {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-1);
+}
+.nmcp-endpoint > div:first-child { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.nmcp-endpoint b { font-size: 12px; letter-spacing: .3px; }
+.nmcp-endpoint small { color: var(--muted); font-size: 11.5px; }
+.nmcp-endpoint-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nmcp-endpoint-meta code { font-size: 12px; overflow-wrap: anywhere; }
+.nmcp-actions .btn { display: inline-flex; align-items: center; gap: 5px; }
+.nmcp-actions .icon { width: 14px; height: 14px; }
+.nmcp-bridges { display: grid; gap: 8px; }
+.nmcp-bridge {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-1);
+}
+.nmcp-bridge b { display: block; font-size: 12px; }
+.nmcp-bridge small { display: block; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.nmcp-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
+.nmcp-form label { display: grid; gap: 5px; font-size: 12px; color: var(--muted); }
+.nmcp-form select, .nmcp-panel textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-input);
+  color: var(--text);
+  padding: 8px 9px;
+  font-size: 12px;
+}
+.nmcp-sessions { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 9px; }
+.nmcp-session { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--surface-2); }
+.nmcp-session b { display: block; font-size: 12px; }
+.nmcp-session small { color: var(--muted); font-size: 11px; }
+.nmcp-tools { display: grid; gap: 6px; max-height: 260px; overflow: auto; padding-right: 4px; }
+.nmcp-tool { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-1); }
+.nmcp-tool b { display: block; font-size: 11.5px; color: var(--accent-text); font-family: var(--mono); }
+.nmcp-tool span { display: block; color: var(--muted); font-size: 11px; line-height: 1.55; margin-top: 3px; }
+.nmcp-agent { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.nmcp-agent:last-of-type { border-bottom: 0; }
+.nmcp-agent p { margin: 4px 0; }
+.nmcp-prompt { margin-top: 12px; }
+.nmcp-prompt textarea { min-height: 104px; resize: vertical; line-height: 1.6; }
+.nmcp-logs { grid-column: 1 / -1; }
+.nmcp-logs pre {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--terminal-bg);
+  border: 1px solid var(--terminal-border);
+  color: var(--terminal-text);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1080px) {
+  .nmcp-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .nmcp-hero { flex-direction: column; align-items: flex-start; }
+  .nmcp-form { grid-template-columns: 1fr; }
+  .nmcp-bridge { align-items: flex-start; flex-direction: column; }
+}

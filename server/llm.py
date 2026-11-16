@@ -63,6 +63,32 @@ def _content_text(content) -> str:
     return ""
 
 
+def _custom_headers(provider: dict) -> dict[str, str]:
+    """转发 provider 的 custom_headers；跳过换行与空值。"""
+    raw = provider.get("custom_headers")
+    if not isinstance(raw, dict):
+        return {}
+    headers = {}
+    for name, value in raw.items():
+        name = str(name or "").strip()
+        value = str(value or "").strip()
+        if not name or not value or "\r" in name + value or "\n" in name + value:
+            continue
+        headers[name] = value
+    return headers
+
+
+def _apply_headers(request, key: str, headers: dict[str, str],
+                   accept: str = "") -> None:
+    for name, value in headers.items():
+        request.add_header(name, value)
+    request.add_header("Content-Type", "application/json")
+    if accept:
+        request.add_header("Accept", accept)
+    if key:
+        request.add_header("Authorization", f"Bearer {key}")
+
+
 def _post(
     url: str,
     key: str,
@@ -71,6 +97,7 @@ def _post(
     max_tokens: int,
     timeout: float,
     extra_body: dict | None = None,
+    headers: dict[str, str] | None = None,
 ) -> tuple[str, str]:
     """返回 (正文, 思考内容)。"""
     body = {
@@ -85,9 +112,7 @@ def _post(
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
         method="POST",
     )
-    request.add_header("Content-Type", "application/json")
-    if key:
-        request.add_header("Authorization", f"Bearer {key}")
+    _apply_headers(request, key, headers or {})
 
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -164,15 +189,18 @@ def chat(
 ) -> str:
     provider = _load_provider(inst, provider_id)
     url, key, model, extra = _credentials(provider)
+    headers = _custom_headers(provider)
 
     content, reasoning = _post(
-        url, key, model, messages, max_tokens, timeout, extra_body=extra
+        url, key, model, messages, max_tokens, timeout, extra_body=extra,
+        headers=headers,
     )
     if not content and reasoning and max_tokens < 8192:
         # 思考模型可能把 token 预算吃光，翻倍重试一次
         retry_budget = min(max_tokens * 2, 8192)
         content, reasoning = _post(
-            url, key, model, messages, retry_budget, timeout, extra_body=extra
+            url, key, model, messages, retry_budget, timeout, extra_body=extra,
+            headers=headers,
         )
     if content:
         return content
@@ -229,10 +257,9 @@ def chat_stream(
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
         method="POST",
     )
-    request.add_header("Content-Type", "application/json")
-    request.add_header("Accept", "text/event-stream")
-    if key:
-        request.add_header("Authorization", f"Bearer {key}")
+    _apply_headers(
+        request, key, _custom_headers(provider), accept="text/event-stream"
+    )
     try:
         response = urllib.request.urlopen(request, timeout=timeout)
     except urllib.error.HTTPError as exc:

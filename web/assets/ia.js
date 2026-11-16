@@ -10,6 +10,8 @@
     market: "capMarket",
     plugins: "capInstalled",
     biliConsole: "capBili",
+    capBiliCreative: "capBiliPublish",
+    biliCreative: "capBiliPublish",
     douyinConsole: "capDouyin",
     dsh: "capDshPlugins",
     dshSkills: "capDshSkills",
@@ -20,6 +22,8 @@
 
   const KNOWN_ROUTES = new Set([
     "overview",
+    "functions",
+    "bot",
     "hubBots",
     "hubLive",
     "hubGroup",
@@ -33,6 +37,7 @@
     "life",
     "people",
     "memes",
+    "imageMemes",
     "vision",
     "capMarket",
     "capInstalled",
@@ -42,7 +47,15 @@
     "capDshPlugins",
     "capDshSkills",
     "capDshAccess",
+    "mcpMode",
+    "nativeMcp",
+    "snowluma",
+    "probability",
+    "probabilityNapcat",
+    "knowledge",
+    "voice",
     "capBili",
+    "capBiliPublish",
     "capDouyin",
     "approvals",
     "automationCenter",
@@ -69,12 +82,17 @@
     "drift",
     "resources",
     "canary",
+    "cost",
+    "snapshots",
+    "offsite",
     "settings",
+    "guide",
   ]);
 
   function routeKey(value) {
     const text = String(value || "").replace(/^#\/?/, "");
-    return text.split("?")[0] || "overview";
+    // 支持 #/bot/<实例ID> 与 #/页面?bot=<实例ID>，路由只取第一段路径
+    return text.split("?")[0].split("/")[0] || "overview";
   }
 
   function resolveRoute(value) {

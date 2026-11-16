@@ -1,0 +1,5 @@
+name: astrbot_plugin_breeze_tts
+display_name: 牧鱼语音
+desc: 为机器人接入驰风 Breeze TTS，支持音色设计与声音克隆
+version: v0.2.1
+author: zexuan604

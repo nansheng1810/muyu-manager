@@ -1,4 +1,4 @@
-"""HTTP 接口层。"""
+﻿"""HTTP 接口层。"""
 
 from __future__ import annotations
 
@@ -13,17 +13,20 @@ import urllib.parse
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import (
+    agent_mode as agent_mode_mod,
     alerts as alerts_mod,
     approvals,
     automation as automation_mod,
     backup as backup_mod,
     bili,
+    bili_publish as bili_publish_mod,
     canary as canary_mod,
     consoles,
+    cost as cost_mod,
     creator,
     dashboard,
     deploy as deploy_mod,
@@ -36,8 +39,10 @@ from . import (
     health as health_mod,
     human_mode as human_mode_mod,
     human_settings,
+    image_memes as image_memes_mod,
     inbox as inbox_mod,
     insight as insight_mod,
+    knowledge as knowledge_mod,
     learn,
     learn_auto,
     life as life_mod,
@@ -45,22 +50,29 @@ from . import (
     llm,
     market,
     matrix as matrix_mod,
+    mcp_mode as mcp_mode_mod,
+    mcp_native as mcp_native_mod,
     memes as memes_mod,
     memory,
     memory_audit,
     mood as mood_mod,
     napcat as napcat_mod,
     notify as notify_mod,
+    offsite as offsite_mod,
     persona as persona_mod,
     presence as presence_mod,
     provisioner as provisioner_mod,
+    reply_probability as reply_probability_mod,
     resources as resources_mod,
     rhythm as rhythm_mod,
     runner as runner_mod,
+    snapshots as snapshots_mod,
+    snowluma as snowluma_mod,
     store,
     styles,
     tasks as tasks_mod,
     vision as vision_mod,
+    voice as voice_mod,
     watchdog as watchdog_mod,
 )
 from .store import (
@@ -74,10 +86,15 @@ from .store import (
     seed_instances,
 )
 
-app = FastAPI(title="牧鱼", version="1.23.12")
+app = FastAPI(title="牧鱼", version="1.30.8")
 runner = runner_mod.runner
 watchdog = watchdog_mod.watchdog
 app.include_router(dsh_mod.router)
+app.include_router(bili_publish_mod.router)
+app.include_router(mcp_mode_mod.router)
+app.include_router(mcp_native_mod.router)
+app.include_router(snowluma_mod.router)
+app.add_api_websocket_route("/api/mcp-native/bridge/ws", mcp_native_mod.bridge_ws)
 
 _INST_LOCK = threading.Lock()
 
@@ -92,8 +109,15 @@ def _start_watchdog() -> None:
     notify_mod.pusher.start()
     duet_mod.engine.start_auto()
     inbox_mod.start_sync()
+    offsite_mod.worker.start()
     threading.Thread(
         target=dsh_mod.auto_start, daemon=True, name="dsh-autostart"
+    ).start()
+    threading.Thread(
+        target=mcp_native_mod.start_all, daemon=True, name="native-mcp-autostart"
+    ).start()
+    threading.Thread(
+        target=agent_mode_mod.restore_all, daemon=True, name="agent-mode-restore"
     ).start()
 
 
@@ -103,6 +127,9 @@ def _stop_scheduler() -> None:
     notify_mod.pusher.stop()
     duet_mod.engine.shutdown()
     inbox_mod.stop_sync()
+    offsite_mod.worker.stop()
+    agent_mode_mod.stop_all()
+    mcp_native_mod.stop_all()
 
 
 # ----------------------------------------------------------------- helpers
@@ -131,9 +158,30 @@ def _require(instances: list[dict], inst_id: str) -> dict:
     raise HTTPException(status_code=404, detail=f"机器人不存在：{inst_id}")
 
 
+def _installed_plugin_ids(inst: dict) -> list[str]:
+    """扫描机器人插件目录，返回已安装插件目录名（不依赖 Dashboard 在线）。"""
+    plugins_dir = Path(str(inst.get("root") or "")) / "data" / "plugins"
+    if not plugins_dir.is_dir():
+        return []
+    found: list[str] = []
+    try:
+        children = sorted(plugins_dir.iterdir(), key=lambda item: item.name.lower())
+    except OSError:
+        return []
+    for child in children:
+        if not child.is_dir():
+            continue
+        if not ((child / "metadata.yaml").exists() or (child / "main.py").exists()):
+            continue
+        if child.name not in found:
+            found.append(child.name)
+    return found
+
+
 def _decorate(inst: dict) -> dict:
     view = public_instance(inst)
     view["status"] = runner.status(inst)
+    view["installed_plugins"] = _installed_plugin_ids(inst)
     view["napcat"] = runner.napcat_status(inst)
     view["napcat"]["watchdog"] = watchdog.snapshot().get(inst["id"]) or {
         "stage": "idle",
@@ -1000,6 +1048,69 @@ def presence_group_config_update(payload: dict = Body(...)):
         return _fail(str(exc), 400)
 
 
+@app.get("/api/reply-probability")
+def reply_probability_status():
+    return _ok(reply_probability_mod.snapshot(_instances()))
+
+
+@app.post("/api/reply-probability")
+def reply_probability_update(payload: dict = Body(...)):
+    inst = _require(_instances(), str(payload.get("instance_id") or ""))
+    try:
+        ratio = reply_probability_mod.pct_to_ratio(payload.get("agent_probability"))
+        saved = reply_probability_mod.set_probability(str(inst["id"]), ratio)
+    except reply_probability_mod.ReplyProbabilityError as exc:
+        return _fail(str(exc), 400)
+    return _ok({
+        "instance_id": inst["id"],
+        "agent_probability_pct": round(saved * 100, 2),
+    })
+
+
+@app.get("/api/reply-probability/napcat")
+def reply_probability_napcat(instance_id: str = Query("")):
+    inst = _require(_instances(), instance_id)
+    try:
+        return _ok(presence_mod.gc_config(inst))
+    except presence_mod.PresenceError as exc:
+        return _fail(str(exc), 400)
+
+
+@app.post("/api/reply-probability/napcat")
+def reply_probability_napcat_update(payload: dict = Body(...)):
+    if not _presence_confirmed(payload.get("confirm")):
+        return _fail("写入 NapCat 接话概率需要 confirm=true 确认", 400)
+    inst = _require(_instances(), str(payload.get("instance_id") or ""))
+    config = payload.get("config")
+    if not isinstance(config, dict):
+        return _fail("config 必须是对象", 400)
+    allowed = {
+        "initial_probability", "after_reply_probability",
+        "probability_duration", "enable_dynamic_reply_probability",
+    }
+    patch = {key: value for key, value in config.items() if key in allowed}
+    if not patch:
+        return _fail("没有可写入的概率字段", 400)
+    for key, value in patch.items():
+        if key == "enable_dynamic_reply_probability":
+            if not isinstance(value, bool):
+                return _fail(f"{key} 必须是布尔值", 400)
+            continue
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return _fail(f"{key} 必须是数字", 400)
+        upper = 86400 if key == "probability_duration" else 1
+        if value < 0 or value > upper:
+            return _fail(f"{key} 需在 0–{upper} 之间", 400)
+        if key == "probability_duration":
+            patch[key] = int(value)
+        else:
+            patch[key] = round(float(value), 4)
+    try:
+        return _ok(presence_mod.save_gc_config(inst, patch))
+    except presence_mod.PresenceError as exc:
+        return _fail(str(exc), 400)
+
+
 @app.get("/api/presence/diaries")
 def presence_diaries(instance_id: str = Query(""), limit: int = Query(60)):
     inst = _require(_instances(), instance_id)
@@ -1295,21 +1406,24 @@ def _start_flow(inst: dict, restart: bool = False) -> tuple[dict, str]:
     _spawn_provision(inst)
 
     napcat_note = ""
-    napcat_info = runner.napcat_status(inst)
-    if napcat_info.get("configured"):
-        if napcat_info.get("running"):
-            napcat_note = "NapCat 已在线"
-        else:
-            try:
-                creator.sync_napcat(inst)
-                launched = runner.start_napcat(inst)
-                napcat_note = (
-                    "NapCat 已在运行，请在「扫码 / 控制台」页确认登录状态"
-                    if launched.get("already")
-                    else "已同时启动 NapCat，请打开「扫码 / 控制台」页扫码登录（登录成功后消息才会回复）"
-                )
-            except Exception as exc:  # noqa: BLE001
-                napcat_note = f"NapCat 启动失败：{exc}"
+    if snowluma_mod.binding_enabled(str(inst.get("id") or "")):
+        napcat_note = "SnowLuma 已绑定，跳过 NapCat"
+    else:
+        napcat_info = runner.napcat_status(inst)
+        if napcat_info.get("configured"):
+            if napcat_info.get("running"):
+                napcat_note = "NapCat 已在线"
+            else:
+                try:
+                    creator.sync_napcat(inst)
+                    launched = runner.start_napcat(inst)
+                    napcat_note = (
+                        "NapCat 已在运行，请在「扫码 / 控制台」页确认登录状态"
+                        if launched.get("already")
+                        else "已同时启动 NapCat，请打开「扫码 / 控制台」页扫码登录（登录成功后消息才会回复）"
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    napcat_note = f"NapCat 启动失败：{exc}"
 
     view = _decorate(inst)
     view["sync"] = notes
@@ -2212,6 +2326,98 @@ def _plugin_view(item: dict) -> dict:
 
 def _plugin_id(plugin_id: str) -> str:
     return urllib.parse.quote(plugin_id, safe="")
+
+
+def _plugin_suite(inst: dict) -> dict:
+    settings = _settings()
+    reference = Path(str(settings.get("astrbot_source") or "")) / "data" / "plugins"
+    bundle_names = provisioner_mod._bundle_names()
+    installed = _installed_plugin_ids(inst)
+    installed_lower = {item.lower() for item in installed}
+    suite = []
+    for item in provisioner_mod.SUITE:
+        available = (
+            (reference / item["id"]).is_dir()
+            or any(name.startswith(item["id"] + "/") for name in bundle_names)
+            or bool(item.get("repo"))
+        )
+        suite.append(
+            {
+                "id": item["id"],
+                "label": item["label"],
+                "note": item.get("note", ""),
+                "available": available,
+                "installed": item["id"].lower() in installed_lower,
+            }
+        )
+    return {"suite": suite, "installed": installed}
+
+
+@app.get("/api/instances/{inst_id}/plugin-suite")
+def instance_plugin_suite(inst_id: str):
+    inst = _require(_instances(), inst_id)
+    return _ok(_plugin_suite(inst))
+
+
+@app.post("/api/instances/{inst_id}/plugin-suite/install")
+def install_plugin_suite(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    raw = payload.get("plugins")
+    if not isinstance(raw, list) or not raw:
+        return _fail("请选择要安装的插件")
+    installed_lower = {item.lower() for item in _installed_plugin_ids(inst)}
+    known = {item["id"] for item in provisioner_mod.SUITE}
+    chosen = [
+        str(item)
+        for item in raw
+        if str(item) in known and str(item).lower() not in installed_lower
+    ]
+    if not chosen:
+        return _fail("所选插件均已安装")
+    try:
+        job = provisioner_mod.install_plugins(inst_id, _settings(), chosen)
+    except provisioner_mod.InstallError as exc:
+        return _fail(str(exc), 400)
+    return _ok(job, f"已开始安装 {len(chosen)} 个插件")
+
+
+@app.post("/api/instances/{inst_id}/plugin-suite/uninstall")
+def uninstall_plugin_suite(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    raw = payload.get("plugins")
+    if not isinstance(raw, list) or not raw:
+        return _fail("请选择要卸载的插件")
+    if not runner.status(inst).get("running"):
+        return _fail("机器人未运行，请先启动后再卸载插件")
+    installed = {item.lower() for item in _installed_plugin_ids(inst)}
+    known = {item["id"].lower() for item in provisioner_mod.SUITE}
+    chosen = [
+        str(item)
+        for item in raw
+        if str(item).lower() in installed and str(item).lower() in known
+    ]
+    if not chosen:
+        return _fail("所选插件不在可卸载列表中")
+    removed: list[str] = []
+    failed: list[dict] = []
+    for plugin_id in chosen:
+        try:
+            dashboard.call(
+                inst,
+                "DELETE",
+                "plugins/by-id",
+                query={"plugin_id": plugin_id},
+                timeout=180,
+            )
+            removed.append(plugin_id)
+        except dashboard.DashboardError as exc:
+            failed.append({"id": plugin_id, "error": exc.message})
+        except Exception as exc:  # noqa: BLE001 - 单个插件失败不影响其他插件
+            failed.append({"id": plugin_id, "error": str(exc)})
+    message = f"已卸载 {len(removed)} 个插件"
+    if failed:
+        message += f"，失败 {len(failed)} 个"
+    return _ok({"removed": removed, "failed": failed}, message)
 
 
 @app.get("/api/instances/{inst_id}/plugins")
@@ -3667,6 +3873,112 @@ def memes_delete(inst_id: str, item_id: str):
         return _fail(str(exc))
 
 
+@app.get("/api/instances/{inst_id}/image-memes")
+def image_memes_overview(inst_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(image_memes_mod.overview(inst))
+    except Exception as exc:  # noqa: BLE001
+        return _fail(str(exc))
+
+
+@app.post("/api/instances/{inst_id}/image-memes/import")
+def image_memes_import(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        result = image_memes_mod.import_pack(
+            inst,
+            str(payload.get("source_dir") or ""),
+            str(payload.get("pack_id") or ""),
+            str(payload.get("name") or ""),
+        )
+        return _ok(result, "表情包已导入" if result.get("imported") else "表情包已存在")
+    except Exception as exc:  # noqa: BLE001
+        return _fail(str(exc))
+
+
+@app.get("/api/instances/{inst_id}/image-memes/images")
+def image_memes_images(
+    inst_id: str,
+    pack_id: str = Query(""),
+    category: str = Query(""),
+):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(image_memes_mod.list_images(inst, pack_id, category))
+    except Exception as exc:  # noqa: BLE001
+        return _fail(str(exc))
+
+
+@app.get("/api/instances/{inst_id}/image-memes/file")
+def image_memes_file(
+    inst_id: str,
+    pack_id: str = Query(...),
+    category: str = Query(...),
+    name: str = Query(...),
+):
+    inst = _require(_instances(), inst_id)
+    try:
+        path = image_memes_mod.image_path(inst, pack_id, category, name)
+        return FileResponse(
+            path,
+            media_type=image_memes_mod.mime_for(path),
+            headers={"Cache-Control": "private, max-age=3600"},
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _fail(str(exc))
+
+
+@app.post("/api/instances/{inst_id}/image-memes/activate")
+def image_memes_activate(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(image_memes_mod.activate(
+            inst, str(payload.get("pack_id") or "")
+        ), "已切换表情包")
+    except Exception as exc:  # noqa: BLE001
+        return _fail(str(exc))
+
+
+@app.post("/api/instances/{inst_id}/image-memes/images/delete")
+def image_memes_delete(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(image_memes_mod.delete_image(
+            inst,
+            str(payload.get("pack_id") or ""),
+            str(payload.get("category") or ""),
+            str(payload.get("name") or ""),
+        ), "已删除")
+    except Exception as exc:  # noqa: BLE001
+        return _fail(str(exc))
+
+
+@app.patch("/api/instances/{inst_id}/image-memes/settings")
+def image_memes_settings(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(image_memes_mod.save_settings(inst, payload), "表情包设置已保存")
+    except Exception as exc:  # noqa: BLE001
+        return _fail(str(exc))
+
+
+@app.post("/api/instances/{inst_id}/image-memes/random-send")
+def image_memes_random_send(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        data = image_memes_mod.random_send(
+            inst,
+            str(payload.get("group_id") or ""),
+            str(payload.get("pack_id") or ""),
+            str(payload.get("category") or ""),
+            bool(payload.get("dry_run")),
+        )
+        return _ok(data, "已随机发送" if not payload.get("dry_run") else "已选中一张")
+    except Exception as exc:  # noqa: BLE001
+        return _fail(str(exc))
+
+
 @app.get("/api/instances/{inst_id}/vision")
 def vision_list(inst_id: str, limit: int = Query(60)):
     inst = _require(_instances(), inst_id)
@@ -3694,6 +4006,389 @@ def vision_delete(inst_id: str, item_id: str):
         return _ok({"removed": removed}, "已删除" if removed else "没有找到这条记录")
     except Exception as exc:  # noqa: BLE001
         return _fail(str(exc))
+
+
+# ------------------------------------------------- knowledge / cost / snapshots
+
+
+def _proxy_error(exc: Exception):
+    status = getattr(exc, "status", 400)
+    message = getattr(exc, "message", None) or str(exc)
+    return _fail(message, status if isinstance(status, int) else 400)
+
+
+@app.get("/api/instances/{inst_id}/knowledge/bases")
+def knowledge_bases(inst_id: str, page: int = Query(1), page_size: int = Query(50)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(knowledge_mod.list_bases(inst, page, page_size))
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.post("/api/instances/{inst_id}/knowledge/bases")
+def knowledge_base_create(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(knowledge_mod.create_base(inst, payload), "知识库已创建")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.get("/api/instances/{inst_id}/knowledge/providers")
+def knowledge_providers(inst_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok({"items": knowledge_mod.embedding_providers(inst)})
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.get("/api/instances/{inst_id}/knowledge/bases/{kb_id}/stats")
+def knowledge_stats(inst_id: str, kb_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(knowledge_mod.base_stats(inst, kb_id))
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.get("/api/instances/{inst_id}/knowledge/bases/{kb_id}/documents")
+def knowledge_documents(inst_id: str, kb_id: str, search: str = Query("")):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(knowledge_mod.list_documents(inst, kb_id, search))
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.post("/api/instances/{inst_id}/knowledge/bases/{kb_id}/documents")
+async def knowledge_upload(inst_id: str, kb_id: str, request: Request):
+    inst = _require(_instances(), inst_id)
+    try:
+        body = await request.body()
+        content_type = request.headers.get("content-type", "application/octet-stream")
+        return _ok(knowledge_mod.upload_document(inst, kb_id, body, content_type), "文档已提交解析")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.post("/api/instances/{inst_id}/knowledge/bases/{kb_id}/import-url")
+def knowledge_import_url(inst_id: str, kb_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(knowledge_mod.import_urls(inst, kb_id, payload), "网页已提交解析")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.post("/api/instances/{inst_id}/knowledge/bases/{kb_id}/retrieve")
+def knowledge_retrieve(inst_id: str, kb_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(knowledge_mod.retrieve(inst, kb_id, payload))
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.delete("/api/instances/{inst_id}/knowledge/bases/{kb_id}/documents/{doc_id}")
+def knowledge_document_delete(inst_id: str, kb_id: str, doc_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(knowledge_mod.delete_document(inst, kb_id, doc_id), "文档已删除")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.delete("/api/instances/{inst_id}/knowledge/bases/{kb_id}")
+def knowledge_base_delete(inst_id: str, kb_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(knowledge_mod.delete_base(inst, kb_id), "知识库已删除")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.get("/api/cost")
+def cost_overview(days: int = Query(30)):
+    try:
+        return _ok(cost_mod.collect(days))
+    except Exception as exc:  # noqa: BLE001
+        return _fail(f"读取用量失败：{exc}", 500)
+
+
+@app.get("/api/cost/config")
+def cost_config_get():
+    return _ok(cost_mod.load_config())
+
+
+@app.put("/api/cost/config")
+def cost_config_put(payload: dict = Body(...)):
+    try:
+        return _ok(cost_mod.save_config(payload), "成本设置已保存")
+    except Exception as exc:  # noqa: BLE001
+        return _fail(f"保存成本设置失败：{exc}", 500)
+
+
+@app.get("/api/instances/{inst_id}/snapshots")
+def snapshots_list(inst_id: str):
+    inst = _require(_instances(), inst_id)
+    return _ok({"items": snapshots_mod.list_snapshots(inst)})
+
+
+@app.post("/api/instances/{inst_id}/snapshots")
+def snapshots_create(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(snapshots_mod.create(inst, str(payload.get("label") or "manual")), "快照已创建")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.get("/api/instances/{inst_id}/snapshots/diff")
+def snapshots_diff(inst_id: str, from_id: str = Query(...), to_id: str = Query(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(snapshots_mod.diff(inst, from_id, to_id))
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.post("/api/instances/{inst_id}/snapshots/restore")
+def snapshots_restore(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(snapshots_mod.restore(
+            inst, str(payload.get("snapshot_id") or ""),
+            payload.get("files"), str(payload.get("confirm") or ""),
+        ), "配置已回滚")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.delete("/api/instances/{inst_id}/snapshots/{snapshot_id}")
+def snapshots_delete(inst_id: str, snapshot_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(snapshots_mod.delete(inst, snapshot_id), "快照已删除")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.get("/api/offsite")
+def offsite_status():
+    try:
+        return _ok(offsite_mod.status())
+    except Exception as exc:  # noqa: BLE001
+        return _fail(str(exc), 500)
+
+
+@app.put("/api/offsite")
+def offsite_save(payload: dict = Body(...)):
+    allowed = {key: value for key, value in payload.items() if str(key).startswith("offsite_")}
+    if not allowed:
+        return _fail("没有可保存的异地备份设置")
+    store.save_settings(allowed)
+    return _ok(offsite_mod.status(), "异地备份设置已保存")
+
+
+@app.post("/api/offsite/test")
+def offsite_test():
+    try:
+        return _ok(offsite_mod.test_connection(), "WebDAV 连接正常")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.post("/api/offsite/upload")
+def offsite_upload(payload: dict = Body(...)):
+    try:
+        return _ok(offsite_mod.upload(str(payload.get("path") or "")), "已上传到 WebDAV")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.get("/api/offsite/remote")
+def offsite_remote():
+    try:
+        return _ok({"items": offsite_mod.list_remote()})
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.delete("/api/offsite/remote")
+def offsite_remote_delete(name: str = Query(...)):
+    try:
+        return _ok(offsite_mod.delete_remote(name), "远程备份已删除")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+# ------------------------------------------------------------------- voice
+
+
+@app.get("/api/instances/{inst_id}/voice")
+def voice_status(inst_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(voice_mod.status(inst))
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.get("/api/instances/{inst_id}/voice/mood")
+def voice_mood(inst_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(voice_mod.mood_state(inst))
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.post("/api/instances/{inst_id}/voice/install")
+def voice_install(inst_id: str, force: bool = Query(False)):
+    inst = _require(_instances(), inst_id)
+    try:
+        message = "语音插件已更新" if force else "语音插件已安装"
+        return _ok(voice_mod.install(inst, force=force), message)
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.get("/api/instances/{inst_id}/voice/cache")
+def voice_cache_status(inst_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(voice_mod.cache_status(inst))
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.delete("/api/instances/{inst_id}/voice/cache")
+def voice_cache_clear(inst_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(voice_mod.clear_cache(inst), "语音缓存已清空")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.put("/api/instances/{inst_id}/voice")
+def voice_save(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(voice_mod.save(inst, payload), "语音回复已开启")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.post("/api/instances/{inst_id}/voice/disable")
+def voice_disable(inst_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(voice_mod.disable(inst), "语音回复已关闭")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.get("/api/instances/{inst_id}/voice/endpoints")
+def voice_endpoints(inst_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(voice_mod.probe_endpoints())
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.post("/api/instances/{inst_id}/voice/presets")
+def voice_create_preset(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(voice_mod.create_preset(inst, payload), "人声预设已创建")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.put("/api/instances/{inst_id}/voice/presets/{preset_id}")
+def voice_update_preset(inst_id: str, preset_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(voice_mod.update_preset(inst, preset_id, payload), "人声预设已保存")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.post("/api/instances/{inst_id}/voice/presets/{preset_id}/ref-audio")
+async def voice_preset_ref_upload(
+    inst_id: str,
+    preset_id: str,
+    request: Request,
+    name: str = Query("reference.wav"),
+):
+    inst = _require(_instances(), inst_id)
+    try:
+        body = await request.body()
+        return _ok(
+            voice_mod.save_preset_audio(inst, preset_id, name, body),
+            "预设参考音频已替换",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.delete("/api/instances/{inst_id}/voice/presets/{preset_id}")
+def voice_delete_preset(inst_id: str, preset_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(voice_mod.delete_preset(inst, preset_id), "人声预设已删除")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.post("/api/instances/{inst_id}/voice/presets/{preset_id}")
+def voice_apply_preset(inst_id: str, preset_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(voice_mod.apply_preset(inst, preset_id), "人声预设已应用")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.post("/api/instances/{inst_id}/voice/preview")
+def voice_preview(inst_id: str, payload: dict = Body(...)):
+    inst = _require(_instances(), inst_id)
+    try:
+        audio = voice_mod.preview(inst, payload)
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+    return Response(
+        content=audio,
+        media_type="audio/wav",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/instances/{inst_id}/voice/ref-audio")
+async def voice_ref_upload(
+    inst_id: str,
+    request: Request,
+    name: str = Query("reference.wav"),
+):
+    inst = _require(_instances(), inst_id)
+    try:
+        body = await request.body()
+        return _ok(voice_mod.save_ref_audio(inst, name, body), "参考音频已保存")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
+
+
+@app.delete("/api/instances/{inst_id}/voice/ref-audio")
+def voice_ref_delete(inst_id: str):
+    inst = _require(_instances(), inst_id)
+    try:
+        return _ok(voice_mod.delete_ref_audio(inst), "参考音频已删除")
+    except Exception as exc:  # noqa: BLE001
+        return _proxy_error(exc)
 
 
 # ------------------------------------------------------------ static files

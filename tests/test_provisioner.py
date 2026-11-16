@@ -150,5 +150,109 @@ class RuntimeStatusTest(unittest.TestCase):
         json.dumps(data)
 
 
+class PythonBootstrapTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.source = self.root / "AstrBot"
+        self.source.mkdir()
+        self.runtime = self.root / "runtime"
+        self.downloads = self.root / "downloads"
+        self.patches = [
+            mock.patch.object(provisioner, "RUNTIME_DIR", self.runtime),
+            mock.patch.object(provisioner, "DOWNLOAD_DIR", self.downloads),
+        ]
+        for patch in self.patches:
+            patch.start()
+
+    def tearDown(self):
+        for patch in reversed(self.patches):
+            patch.stop()
+        self.tmp.cleanup()
+
+    def test_installer_1603_falls_back_to_embedded(self):
+        embedded = str(self.root / "embed" / "python.exe")
+        process = mock.Mock(returncode=1603, stderr="", stdout="")
+        with mock.patch.object(provisioner, "_system_python", return_value=""), mock.patch.object(
+            provisioner, "_download", return_value=(b"installer", "")
+        ), mock.patch.object(provisioner, "_run", return_value=process), mock.patch.object(
+            provisioner, "_embedded_python", return_value=embedded
+        ) as embedded_python:
+            result = provisioner._ensure_python(str(self.source), "job")
+        embedded_python.assert_called_once_with("job")
+        self.assertEqual(result, embedded)
+
+    def test_embedded_python_enables_site_and_installs_pip(self):
+        target = self.runtime / "python-embed"
+        target.mkdir(parents=True)
+        (target / "python.exe").write_bytes(b"")
+        pth = target / "python312._pth"
+        pth.write_text("python312.zip\n.\n#import site\n", encoding="utf-8")
+        probe = mock.Mock(returncode=1, stderr="", stdout="")
+        install = mock.Mock(returncode=0, stderr="", stdout="")
+        with mock.patch.object(
+            provisioner, "_run", side_effect=[probe, install]
+        ) as run, mock.patch.object(
+            provisioner, "_download", return_value=(b"get-pip", "")
+        ):
+            result = provisioner._embedded_python("job")
+        self.assertEqual(result, str(target / "python.exe"))
+        self.assertIn("import site", pth.read_text(encoding="utf-8"))
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("get-pip.py", " ".join(run.call_args_list[1].args[0]))
+
+    def test_system_python_scans_common_install_dirs(self):
+        exe = self.root / "Programs" / "Python" / "Python312" / "python.exe"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"")
+        with mock.patch.object(
+            provisioner.shutil, "which", return_value=None
+        ), mock.patch.dict(
+            provisioner.os.environ,
+            {"LOCALAPPDATA": str(self.root), "PROGRAMFILES": "", "PROGRAMFILES(X86)": ""},
+            clear=False,
+        ), mock.patch.object(
+            provisioner, "_python_version", return_value=(3, 12)
+        ):
+            result = provisioner._system_python()
+        self.assertEqual(result, str(exe))
+
+
+class PluginSuiteScanTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        plugins = self.root / "data" / "plugins"
+        (plugins / "astrbot_plugin_fleet_inbox").mkdir(parents=True)
+        (plugins / "astrbot_plugin_fleet_inbox" / "metadata.yaml").write_text(
+            "name: astrbot_plugin_fleet_inbox\n", encoding="utf-8"
+        )
+        (plugins / "meme_manager").mkdir()
+        (plugins / "meme_manager" / "main.py").write_text("print(1)\n", encoding="utf-8")
+        (plugins / "not_a_plugin").mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_scan_lists_plugin_directories(self):
+        from server import api
+
+        ids = api._installed_plugin_ids({"root": str(self.root)})
+        self.assertEqual(ids, ["astrbot_plugin_fleet_inbox", "meme_manager"])
+
+    def test_suite_marks_installed_plugins(self):
+        from server import api
+
+        with mock.patch.object(api, "_settings", return_value={"astrbot_source": ""}):
+            data = api._plugin_suite({"root": str(self.root)})
+        by_id = {item["id"]: item for item in data["suite"]}
+        self.assertTrue(by_id["astrbot_plugin_fleet_inbox"]["installed"])
+        self.assertTrue(by_id["meme_manager"]["installed"])
+        self.assertFalse(by_id["astrbot_plugin_daily_mood"]["installed"])
+        self.assertEqual(
+            data["installed"], ["astrbot_plugin_fleet_inbox", "meme_manager"]
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

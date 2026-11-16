@@ -1,0 +1,7 @@
+name: muyu_mcp_bridge
+display_name: 牧鱼 MCP 桥
+desc: 让牧鱼管理器原生 MCP 接管指定 QQ 群；暂停默认 LLM 回复但保留其他插件钩子
+version: v0.1.0
+author: zexuan604
+support_platforms:
+  - aiocqhttp

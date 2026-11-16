@@ -188,8 +188,11 @@
         view.innerHTML = `<div class="empty">${icon("alert")}<h4>没有可用实例</h4><p>请先新增或接入机器人。</p></div>`;
         return;
       }
-      if (!instId || !instances.some((x) => x.id === instId)) {
-        instId = instances[0].id;
+      const focusHit = globalThis.ManagerFocus && globalThis.ManagerFocus.consume(instances);
+      if (focusHit) {
+        instId = String(focusHit.id);
+      } else if (!instId || !instances.some((x) => x.id === instId)) {
+        instId = ((globalThis.ManagerFocus && globalThis.ManagerFocus.pick(instances)) || instances[0]).id;
       }
       renderInstances(view);
       // 记下本次加载使用的实例；请求期间切走就丢弃 styles / personas 的迟到结果。

@@ -43,6 +43,16 @@ CREATE TABLE IF NOT EXISTS eval_runs(
   id TEXT PRIMARY KEY, created REAL, fixture TEXT, model TEXT,
   persona TEXT, score_json TEXT, status TEXT
 );
+CREATE TABLE IF NOT EXISTS config_snapshots(
+  id TEXT PRIMARY KEY, instance_id TEXT NOT NULL, created REAL NOT NULL,
+  label TEXT NOT NULL DEFAULT '', file_count INTEGER NOT NULL DEFAULT 0,
+  bytes INTEGER NOT NULL DEFAULT 0, path TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS offsite_uploads(
+  id TEXT PRIMARY KEY, backup_name TEXT NOT NULL, sha256 TEXT NOT NULL,
+  remote_path TEXT NOT NULL DEFAULT '', bytes INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'ok', error TEXT NOT NULL DEFAULT '', created REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS duet_scenes(
   id TEXT PRIMARY KEY, mode TEXT, group_id TEXT, topic TEXT,
   status TEXT, config_json TEXT, note TEXT, created REAL, updated REAL
@@ -58,6 +68,8 @@ CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status, created);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
 CREATE INDEX IF NOT EXISTS idx_task_runs_task ON task_runs(task_id, started);
 CREATE INDEX IF NOT EXISTS idx_eval_runs_created ON eval_runs(created);
+CREATE INDEX IF NOT EXISTS idx_config_snapshots_instance ON config_snapshots(instance_id, created);
+CREATE INDEX IF NOT EXISTS idx_offsite_uploads_created ON offsite_uploads(created);
 CREATE INDEX IF NOT EXISTS idx_duet_scenes_created ON duet_scenes(created);
 CREATE INDEX IF NOT EXISTS idx_duet_turns_scene ON duet_turns(scene_id, created);
 CREATE TABLE IF NOT EXISTS inbox_threads(

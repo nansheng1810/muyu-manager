@@ -554,8 +554,11 @@
         root.innerHTML = `<div class="empty">${icon("alert")}<h4>还没有机器人</h4><p>先在“机器人”页添加 AstrBot 实例。</p></div>`;
         return;
       }
-      if (!activeId || !instances.some((item) => item.id === activeId)) {
-        activeId = (instances.find(running) || instances[0]).id;
+      const focusHit = globalThis.ManagerFocus && globalThis.ManagerFocus.consume(instances);
+      if (focusHit) {
+        activeId = String(focusHit.id);
+      } else if (!activeId || !instances.some((item) => item.id === activeId)) {
+        activeId = ((globalThis.ManagerFocus && globalThis.ManagerFocus.pick(instances)) || instances.find(running) || instances[0]).id;
       }
       const queryTab = new URLSearchParams(location.search).get("tab");
       const mappedTab = LEGACY_TABS[queryTab] || queryTab;

@@ -10,6 +10,7 @@ import threading
 import time
 import traceback
 import urllib.request
+import json
 from pathlib import Path
 
 if getattr(sys, "frozen", False):
@@ -21,6 +22,51 @@ sys.path.insert(0, str(ROOT))
 LOG_PATH = ROOT / "data" / "logs" / "manager.log"
 PORTS = range(7311, 7341)
 TITLE = "牧鱼 · AstrBot 多机管理台"
+SERVER_LOG_MAX = 5 * 1024 * 1024
+
+
+def redirect_stdio() -> None:
+    """把 stdout/stderr 落到滚动文件，避免隐藏控制台写满后阻塞事件循环。"""
+    log_dir = ROOT / "data" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    path = log_dir / "server.log"
+    try:
+        if path.exists() and path.stat().st_size > SERVER_LOG_MAX:
+            backup = log_dir / "server.1.log"
+            backup.unlink(missing_ok=True)
+            path.replace(backup)
+    except OSError:
+        pass
+    stream = open(
+        path, "a", encoding="utf-8", buffering=1, errors="replace"
+    )
+    sys.stdout = stream
+    sys.stderr = stream
+
+
+def runtime_data_dir() -> Path:
+    """管理器运行态文件的固定位置；各插件按同一路径发现实际端口。"""
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home())
+    return Path(base) / "AstrBot舰队管理器" / "data"
+
+
+def write_runtime(port: int) -> Path:
+    """写入当前管理器端口，供 daily_mood / human_mode / presence / inbox 发现。"""
+    path = runtime_data_dir() / "manager_runtime.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "port": int(port),
+        "url": f"http://127.0.0.1:{int(port)}",
+        "pid": os.getpid(),
+        "updated": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(tmp, path)
+    return path
 
 
 def window_handle(window=None) -> int:
@@ -217,12 +263,14 @@ def open_edge(url: str) -> bool:
 
 
 def main() -> None:
+    redirect_stdio()
     if "--no-background" in sys.argv:
         os.environ["ASTRBOT_MANAGER_NO_BACKGROUND"] = "1"
         log("已禁用后台任务（watchdog / auto-learn）")
     port = pick_port()
     url = f"http://127.0.0.1:{port}"
     log(f"启动服务：{url}")
+    write_runtime(port)
     start_server(port)
     if not wait_ready(url + "/api/health"):
         log("服务启动超时")

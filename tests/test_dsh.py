@@ -57,6 +57,44 @@ class DshCoreTests(unittest.TestCase):
         self.assertEqual(seen["payload"]["payload"], {})
         self.assertEqual(value["items"], [1, 2])
 
+    def test_rpc_011_retries_slash_path_for_2x(self):
+        calls = []
+
+        def fake_http(url, payload=None, timeout=20):
+            calls.append((url, payload))
+            if url.endswith("/api/session.create"):
+                raise dsh.DshError("HTTP 404", 404)
+            return {
+                "type": "server-response",
+                "result": {"ok": True, "value": {"sessionId": "s-1"}},
+            }
+
+        with mock.patch.object(dsh, "_http_json", fake_http):
+            value = dsh.rpc_011("session.create", {"cwd": "D:/ws"}, timeout=5)
+        self.assertEqual(calls[-1][0], "http://127.0.0.1:3080/api/session/create")
+        self.assertEqual(
+            calls[-1][1]["payload"], {"args": {"request": {"cwd": "D:/ws"}}}
+        )
+        self.assertEqual(value["sessionId"], "s-1")
+
+    def test_rpc_011_parameterless_uses_empty_args(self):
+        calls = []
+
+        def fake_http(url, payload=None, timeout=20):
+            calls.append((url, payload))
+            if url.endswith("/api/session.modelCatalog"):
+                raise dsh.DshError("HTTP 404", 404)
+            return {
+                "type": "server-response",
+                "result": {"ok": True, "value": {"default": {"provider": "mimo"}}},
+            }
+
+        with mock.patch.object(dsh, "_http_json", fake_http):
+            value = dsh.rpc_011("session.modelCatalog", {}, timeout=5)
+        self.assertEqual(calls[-1][0], "http://127.0.0.1:3080/api/session/modelCatalog")
+        self.assertEqual(calls[-1][1]["payload"], {"args": {}})
+        self.assertEqual(value["default"]["provider"], "mimo")
+
     def test_install_skill_rejects_traversal(self):
         for bad in ("", "../x", "a/b", ".."):
             with self.assertRaises(dsh.DshError):

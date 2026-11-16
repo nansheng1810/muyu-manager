@@ -1,0 +1,44 @@
+/* 牧鱼 · 图片表情包 */
+.imemes-instances { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.imemes-badge { margin-left:4px; }
+.imemes-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+.imemes-stat { padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
+.imemes-stat b { display:block; font-size:24px; line-height:1.1; letter-spacing:-.03em; }
+.imemes-stat span { display:block; margin-top:5px; color:var(--muted); font-size:12px; }
+.imemes-stat.accent b { color:var(--accent); }
+.imemes-toolbar { display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+.imemes-select { min-width:220px; margin:0; }
+.imemes-select select { width:100%; }
+.imemes-layout { display:grid; grid-template-columns:minmax(0,1fr) 330px; gap:14px; align-items:start; }
+.imemes-library { min-width:0; }
+.imemes-lib-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.imemes-lib-head h3 { margin:0 0 4px; font-size:16px; }
+.imemes-lib-head p { margin:0; color:var(--muted); font-size:12px; line-height:1.6; }
+.imemes-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:10px; }
+.imemes-card { position:relative; margin:0; overflow:hidden; border:1px solid var(--line); border-radius:12px; background:var(--panel-2); }
+.imemes-thumb { aspect-ratio:1; display:flex; align-items:center; justify-content:center; padding:8px; background:var(--bg-2); }
+.imemes-thumb img { width:100%; height:100%; object-fit:contain; display:block; }
+.imemes-card figcaption { padding:8px 10px 10px; }
+.imemes-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+.imemes-meta { display:flex; justify-content:space-between; gap:6px; margin-top:4px; color:var(--muted); font-size:11px; }
+.imemes-del { position:absolute; top:7px; right:7px; width:26px; height:26px; display:grid; place-items:center; border:1px solid var(--line); border-radius:8px; background:color-mix(in srgb,var(--panel) 86%,transparent); color:var(--muted); opacity:0; transition:opacity .15s; }
+.imemes-card:hover .imemes-del { opacity:1; }
+.imemes-del:hover { color:var(--danger); border-color:var(--danger); }
+.imemes-empty { min-height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:var(--muted); text-align:center; }
+.imemes-empty h4 { margin:0; color:var(--text); }
+.imemes-empty p { margin:0; font-size:12px; }
+.imemes-side { display:flex; flex-direction:column; gap:12px; }
+.imemes-panel { padding:14px; }
+.imemes-panel-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+.imemes-panel-head h3 { margin:0; font-size:14px; }
+.imemes-note { margin:8px 0 10px; color:var(--muted); font-size:11px; line-height:1.7; }
+.imemes-range-row { display:flex; align-items:center; gap:10px; margin:10px 0; }
+.imemes-range-row input { flex:1; accent-color:var(--accent); }
+.imemes-range-row output { min-width:44px; text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
+.imemes-send-row { display:flex; gap:8px; flex-wrap:wrap; }
+.imemes-result { min-height:34px; margin:10px 0 0; padding:8px 10px; border-radius:8px; background:var(--bg-2); color:var(--muted); font-size:11px; line-height:1.6; word-break:break-all; }
+@media (max-width: 980px) {
+  .imemes-layout { grid-template-columns:1fr; }
+  .imemes-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .imemes-select { min-width:0; flex:1 1 180px; }
+}

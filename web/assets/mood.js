@@ -182,7 +182,9 @@
         view.innerHTML = `<div class="empty">${icon("alert")}<h4>没有可用实例</h4><p>请先新增或接入机器人。</p></div>`;
         return;
       }
-      if (!instId || !instances.some((x) => x.id === instId)) instId = instances[0].id;
+      const focusHit = globalThis.ManagerFocus && globalThis.ManagerFocus.consume(instances);
+      if (focusHit) instId = String(focusHit.id);
+      else if (!instId || !instances.some((x) => x.id === instId)) instId = ((globalThis.ManagerFocus && globalThis.ManagerFocus.pick(instances)) || instances[0]).id;
       const select = view.querySelector("#mood-inst");
       select.innerHTML = instances.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");
       select.value = instId;

@@ -477,7 +477,9 @@
         target.innerHTML = emptyState("没有可用实例", "请先在「机器人」页新增或接入一个机器人。");
         return;
       }
-      if (!instId || !list.some((i) => i.id === instId)) instId = list[0].id;
+      const focusHit = globalThis.ManagerFocus && globalThis.ManagerFocus.consume(list);
+      if (focusHit) instId = String(focusHit.id);
+      else if (!instId || !list.some((i) => i.id === instId)) instId = ((globalThis.ManagerFocus && globalThis.ManagerFocus.pick(list)) || list[0]).id;
       target.innerHTML = `<div class="chips">
         ${list
           .map(

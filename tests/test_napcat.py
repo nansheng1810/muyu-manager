@@ -49,6 +49,18 @@ class NapCatConfigTest(unittest.TestCase):
             raw = base64.b64decode(qrcode.split(",", 1)[1])
             self.assertTrue(raw.startswith(b"\x89PNG"))
 
+    def test_local_qrcode_image_direct_versions_layout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cache = root / "versions" / "v" / "resources" / "app" / "napcat" / "cache"
+            cache.mkdir(parents=True)
+            (cache / "qrcode.png").write_bytes(b"\x89PNG\r\n\x1a\ndirect")
+
+            qrcode = napcat._local_qrcode_image(root)
+            self.assertTrue(qrcode.startswith("data:image/png;base64,"))
+            raw = base64.b64decode(qrcode.split(",", 1)[1])
+            self.assertTrue(raw.startswith(b"\x89PNG"))
+
     def test_login_state_without_config(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = napcat.login_state({"napcat_dir": tmp})

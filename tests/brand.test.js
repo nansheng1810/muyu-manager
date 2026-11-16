@@ -1,4 +1,4 @@
-const test = require("node:test");
+﻿const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -15,10 +15,10 @@ test("app identity uses the Muyu name", () => {
   assert.match(html, /<title>牧鱼 · AstrBot 多机管理台<\/title>/);
   assert.match(html, /<strong>牧鱼<\/strong>/);
   assert.match(html, /<span>AstrBot 多机管理台<\/span>/);
-  assert.match(html, /v1\.23\.12 · 本地运行/);
+  assert.match(html, /v1\.30\.8 · 本地运行/);
 
   const app = fs.readFileSync(path.join(root, "web/assets/app.js"), "utf8");
-  assert.match(app, /牧鱼 v1\.23\.12/);
+  assert.match(app, /牧鱼 v1\.30\.8/);
 
   const api = fs.readFileSync(path.join(root, "server/api.py"), "utf8");
   assert.match(api, /FastAPI\(title="牧鱼"/);
@@ -96,5 +96,5 @@ test("new chubby-fish icon replaces the old blue-purple gradient mark", () => {
   }
 
   const sw = fs.readFileSync(path.join(root, "web/sw.js"), "utf8");
-  assert.match(sw, /fleet-shell-v1\.23/);
+  assert.match(sw, /fleet-shell-v1\.30\.8/);
 });

@@ -1003,8 +1003,11 @@
         view.innerHTML = `<div class="empty">${icon("bots")}<h4>没有可用实例</h4><p>请先新增或接入机器人。</p></div>`;
         return;
       }
-      if (!ctx.state.pluginInst || !ctx.state.instances.find((item) => item.id === ctx.state.pluginInst)) {
-        ctx.state.pluginInst = ctx.state.instances[0].id;
+      const focusHit = globalThis.ManagerFocus && globalThis.ManagerFocus.consume(ctx.state.instances);
+      if (focusHit) {
+        ctx.state.pluginInst = String(focusHit.id);
+      } else if (!ctx.state.pluginInst || !ctx.state.instances.find((item) => item.id === ctx.state.pluginInst)) {
+        ctx.state.pluginInst = ((globalThis.ManagerFocus && globalThis.ManagerFocus.pick(ctx.state.instances)) || ctx.state.instances[0]).id;
       }
       const inst = ctx.state.instances.find((item) => item.id === ctx.state.pluginInst) || ctx.state.instances[0];
       const ui = {

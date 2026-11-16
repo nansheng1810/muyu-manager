@@ -15,8 +15,21 @@ ROOT = Path(SPECPATH)
 hidden = (
     collect_submodules("server")
     + [
+        "mcp",
+        "mcp.types",
+        "mcp.server",
+        "mcp.server.lowlevel",
+        "mcp.server.lowlevel.server",
+        "mcp.server.streamable_http_manager",
+        "mcp.server.transport_security",
+        "mcp.shared",
+        "mcp.shared.session",
+        "mcp.shared.message",
         "webview.platforms.edgechromium",
         "webview.platforms.winforms",
+        "uvicorn.protocols.websockets.websockets_impl",
+        "websockets.legacy.server",
+        "websockets.asyncio.server",
     ]
 )
 
@@ -24,7 +37,11 @@ a = Analysis(
     [str(ROOT / "launcher.py")],
     pathex=[str(ROOT)],
     binaries=[],
-    datas=[(str(ROOT / "web"), "web")],
+    datas=[
+        (str(ROOT / "web"), "web"),
+        (str(ROOT / "plugins_src"), "plugins_src"),
+        (str(ROOT / "voice_presets"), "voice_presets"),
+    ],
     hiddenimports=hidden,
     hookspath=[],
     hooksconfig={},

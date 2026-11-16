@@ -1,4 +1,4 @@
-"""一键补齐新用户本机缺少的 AstrBot 运行环境、NapCat 与插件套装。"""
+﻿"""一键补齐新用户本机缺少的 AstrBot 运行环境、NapCat 与插件套装。"""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import creator, deploy, fleet_store, runner, store
 
-VERSION = "1.23.12"
+VERSION = "1.30.8"
 
 RUNTIME_DIR = store.DATA_DIR / "runtime"
 DOWNLOAD_DIR = store.DATA_DIR / "downloads"
@@ -34,6 +34,14 @@ PYTHON_VERSION = "3.12.8"
 PYTHON_URLS = [
     f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-amd64.exe",
     f"https://mirrors.huaweicloud.com/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-amd64.exe",
+]
+PYTHON_EMBED_URLS = [
+    f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip",
+    f"https://mirrors.huaweicloud.com/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip",
+]
+GET_PIP_URLS = [
+    "https://bootstrap.pypa.io/get-pip.py",
+    "https://bootstrap.pypa.io/pip/get-pip.py",
 ]
 NAPCAT_RELEASE_API = "https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest"
 _NAPCAT_ASSET = "https://github.com/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.Windows.Node.zip"
@@ -368,6 +376,22 @@ def _download_and_extract(urls: list[str], target: Path, timeout: float = 300.0)
 # -------------------------------------------------------------- env worker
 
 
+def _python_version(exe: str) -> tuple[int, int] | None:
+    try:
+        out = subprocess.run(
+            [exe, "-c", "import sys;print('%d.%d' % sys.version_info[:2])"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    try:
+        return tuple(int(part) for part in out.stdout.strip().split(".")[:2])  # type: ignore[return-value]
+    except ValueError:
+        return None
+
+
 def _system_python() -> str:
     candidates: list[str] = []
     launcher = shutil.which("py")
@@ -385,19 +409,32 @@ def _system_python() -> str:
         found = shutil.which(name)
         if found:
             candidates.append(found)
-    for exe in candidates:
-        try:
-            out = subprocess.run(
-                [exe, "-c", "import sys;print('%d.%d' % sys.version_info[:2])"],
-                capture_output=True, text=True, timeout=30,
-            )
-            if out.returncode != 0:
-                continue
-            version = tuple(int(part) for part in out.stdout.strip().split(".")[:2])
-            if version >= (3, 10):
-                return exe
-        except Exception:
+    roots = [
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Python",
+        Path(os.environ.get("PROGRAMFILES", "")),
+        Path(os.environ.get("PROGRAMFILES(X86)", "")),
+    ]
+    for root in roots:
+        if not str(root) or not root.is_dir():
             continue
+        try:
+            for exe in root.glob("*/python.exe"):
+                candidates.append(str(exe))
+            for exe in root.glob("python*/python.exe"):
+                candidates.append(str(exe))
+            for exe in root.glob("python.exe"):
+                candidates.append(str(exe))
+        except OSError:
+            continue
+    seen: set[str] = set()
+    for exe in candidates:
+        key = exe.lower()
+        if key in seen or not Path(exe).exists():
+            continue
+        seen.add(key)
+        version = _python_version(exe)
+        if version is not None and version >= (3, 10):
+            return exe
     return ""
 
 
@@ -408,6 +445,43 @@ def _run(cmd: list[str], timeout: float, env: dict | None = None) -> subprocess.
     )
 
 
+def _embedded_python(job_id: str) -> str:
+    """免安装 Python：解压即用，绕过官方安装包的 1603 / 权限问题。"""
+    target = RUNTIME_DIR / "python-embed"
+    exe = target / "python.exe"
+    if not exe.exists():
+        _step(job_id, "python", "running", "正在下载免安装 Python")
+        _download_and_extract(PYTHON_EMBED_URLS, target)
+    if not exe.exists():
+        raise InstallError("免安装 Python 解压后未找到解释器")
+    for pth in target.glob("python*._pth"):
+        try:
+            text = pth.read_text(encoding="utf-8", errors="replace")
+            if "#import site" in text:
+                pth.write_text(text.replace("#import site", "import site"), encoding="utf-8")
+        except OSError:
+            continue
+    probe = _run([str(exe), "-m", "pip", "--version"], timeout=60)
+    if probe.returncode != 0:
+        _step(job_id, "python", "running", "正在为免安装 Python 准备 pip")
+        data, _ = _download(GET_PIP_URLS, timeout=180)
+        DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        get_pip = DOWNLOAD_DIR / "get-pip.py"
+        get_pip.write_bytes(data)
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
+        process = _run(
+            [str(exe), str(get_pip), "--no-warn-script-location"],
+            timeout=600,
+            env=env,
+        )
+        if process.returncode != 0:
+            raise InstallError(
+                f"免安装 Python 安装 pip 失败：{(process.stderr or process.stdout or '')[-300:]}"
+            )
+    return str(exe)
+
+
 def _ensure_python(source: str, job_id: str) -> str:
     venv_python = Path(source) / ".venv" / "Scripts" / "python.exe"
     if venv_python.exists():
@@ -416,35 +490,54 @@ def _ensure_python(source: str, job_id: str) -> str:
     if not base:
         if not sys.platform.startswith("win"):
             raise InstallError("未找到 Python 3.10+，请先安装后再试")
-        _step(job_id, "python", "running", f"正在下载 Python {PYTHON_VERSION} 安装包")
-        data, _ = _download(PYTHON_URLS, timeout=300)
-        DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        installer = DOWNLOAD_DIR / f"python-{PYTHON_VERSION}-amd64.exe"
-        installer.write_bytes(data)
-        target = RUNTIME_DIR / "python"
-        _step(job_id, "python", "running", "正在静默安装 Python")
-        process = _run(
-            [
-                str(installer), "/quiet", "InstallAllUsers=0", "PrependPath=0",
-                "Include_pip=1", "Include_launcher=0", "Include_test=0",
-                f"TargetDir={target}",
-            ],
-            timeout=900,
-        )
-        if process.returncode not in (0, 3010):
-            raise InstallError(f"Python 安装失败：{process.returncode}")
-        base = str(target / "python.exe")
-        if not Path(base).exists():
-            raise InstallError("Python 安装完成但未找到解释器")
+        try:
+            _step(job_id, "python", "running", f"正在下载 Python {PYTHON_VERSION} 安装包")
+            data, _ = _download(PYTHON_URLS, timeout=300)
+            DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+            installer = DOWNLOAD_DIR / f"python-{PYTHON_VERSION}-amd64.exe"
+            installer.write_bytes(data)
+            target = RUNTIME_DIR / "python"
+            log_path = DOWNLOAD_DIR / f"python-{PYTHON_VERSION}-install.log"
+            _step(job_id, "python", "running", "正在静默安装 Python")
+            process = _run(
+                [
+                    str(installer), "/quiet", "InstallAllUsers=0", "PrependPath=0",
+                    "Include_pip=1", "Include_launcher=0", "Include_doc=0",
+                    "Include_tcltk=0", "Include_test=0", "/log", str(log_path),
+                    f"TargetDir={target}",
+                ],
+                timeout=900,
+            )
+            if process.returncode not in (0, 3010):
+                raise InstallError(f"Python 安装失败：{process.returncode}")
+            base = str(target / "python.exe")
+            if not Path(base).exists():
+                raise InstallError("Python 安装完成但未找到解释器")
+        except Exception as exc:  # noqa: BLE001
+            _step(job_id, "python", "running", f"官方安装包不可用（{exc}），改用免安装方案")
+            try:
+                return _embedded_python(job_id)
+            except Exception as embed_exc:  # noqa: BLE001
+                raise InstallError(
+                    f"Python 安装失败：{exc}；免安装方案也失败：{embed_exc}"
+                ) from embed_exc
     _step(job_id, "python", "running", "正在创建虚拟环境")
     process = _run([base, "-m", "venv", str(Path(source) / ".venv")], timeout=600)
     if process.returncode != 0:
-        raise InstallError(f"创建虚拟环境失败：{process.stderr[-400:] or process.returncode}")
+        _step(job_id, "python", "running", "创建虚拟环境失败，改用免安装方案")
+        try:
+            return _embedded_python(job_id)
+        except Exception as embed_exc:  # noqa: BLE001
+            raise InstallError(
+                f"创建虚拟环境失败：{process.stderr[-400:] or process.returncode}"
+                f"；免安装方案也失败：{embed_exc}"
+            ) from embed_exc
     venv_python = Path(source) / ".venv" / "Scripts" / "python.exe"
     if not venv_python.exists():
         venv_python = Path(source) / ".venv" / "bin" / "python"
     if not venv_python.exists():
-        raise InstallError("虚拟环境创建后未找到 Python")
+        _step(job_id, "python", "running", "虚拟环境缺少解释器，改用免安装方案")
+        return _embedded_python(job_id)
     return str(venv_python)
 
 

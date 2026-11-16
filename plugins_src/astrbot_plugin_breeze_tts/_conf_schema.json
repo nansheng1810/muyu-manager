@@ -1,0 +1,52 @@
+{
+  "hint": {
+    "type": "string",
+    "description": "语音参数在「牧鱼管理器 - 语音」页面配置，这里不需要填写。",
+    "default": ""
+  },
+  "cache_enabled": {
+    "type": "bool",
+    "description": "缓存已合成的语音：相同文本和音色再次回复时直接复用，不再请求 TTS。",
+    "default": true
+  },
+  "cache_max_entries": {
+    "type": "int",
+    "description": "语音缓存最多保留多少条；超出后淘汰最久未使用的。",
+    "default": 200
+  },
+  "cache_max_mb": {
+    "type": "int",
+    "description": "语音缓存占用上限（MB）；超出后淘汰最久未使用的。",
+    "default": 200
+  },
+  "mood_sync_enabled": {
+    "type": "bool",
+    "description": "情绪联动：按每日心情/群聊情绪动态调整语音语气。推荐在牧鱼管理器「语音」页配置。",
+    "default": false
+  },
+  "mood_group_enabled": {
+    "type": "bool",
+    "description": "优先读取 group_chat_plus 的群聊情绪；关闭后只用每日心情。",
+    "default": true
+  },
+  "mood_manager_url": {
+    "type": "string",
+    "description": "牧鱼管理器地址，用于读取每日心情。",
+    "default": "http://127.0.0.1:7311"
+  },
+  "mood_instance_id": {
+    "type": "string",
+    "description": "管理器里的实例 ID；留空表示不读取每日心情。",
+    "default": ""
+  },
+  "mood_cache_seconds": {
+    "type": "int",
+    "description": "心情状态缓存秒数，避免每条语音都请求管理器。",
+    "default": 20
+  },
+  "mood_tones": {
+    "type": "text",
+    "description": "心情/情绪到语气提示的映射（JSON）；留空使用内置文案。",
+    "default": ""
+  }
+}

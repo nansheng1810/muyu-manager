@@ -1,4 +1,4 @@
-/* 牧鱼 · AstrBot 多机管理台 — 前端应用 */
+﻿/* 牧鱼 · AstrBot 多机管理台 — 前端应用 */
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -57,6 +57,7 @@ const state = {
   settings: {},
   instances: [],
   env: {},
+  installedPlugins: new Set(),
   summaries: {},
   route: "overview",
   market: { q: "", category: "全部", page: 1, size: 24, total: 0, pages: 1, items: [] },
@@ -93,6 +94,36 @@ const state = {
   thinkTimer: null,
   busy: false,
 };
+
+// 当前聚焦的机器人：从机器人卡片进入工作台或带 ?bot= 打开功能页时写入，
+// 各功能页据此默认选中对应实例，做到“每个机器人独立管理”。
+const FOCUS_KEY = "astrbot.manager.focus";
+const ManagerFocus = {
+  id: (() => {
+    try { return localStorage.getItem(FOCUS_KEY) || ""; } catch (_) { return ""; }
+  })(),
+  // pending 只在下一次页面渲染时生效：从机器人卡片进入功能页时强制切到该机器人，
+  // 之后用户仍可在页面内的实例选择器自由切换。
+  pending: "",
+  set(id) {
+    this.id = String(id || "");
+    this.pending = this.id;
+    try { localStorage.setItem(FOCUS_KEY, this.id); } catch (_) { /* ignore */ }
+  },
+  clearPending() { this.pending = ""; },
+  pick(list) {
+    const items = Array.isArray(list) ? list : [];
+    return items.find((item) => String(item.id) === String(this.id)) || null;
+  },
+  // 消费一次“进入页面时指定的机器人”，模块首屏据此选中实例。
+  consume(list) {
+    if (!this.pending) return null;
+    const hit = this.pick(list);
+    if (hit) this.pending = "";
+    return hit;
+  },
+};
+globalThis.ManagerFocus = ManagerFocus;
 
 const consoleUI = window.ManagerConsoles
   ? window.ManagerConsoles.create({
@@ -133,6 +164,10 @@ const dshUI = window.ManagerDsh
       closeModal,
       confirmDialog,
     })
+  : null;
+
+const biliPublishUI = window.ManagerBiliPublish
+  ? window.ManagerBiliPublish.create({ state, api, esc, icon, toast })
   : null;
 
 const healthUI = window.ManagerHealth
@@ -192,6 +227,26 @@ const guardUI = window.ManagerGuard
     })
   : null;
 
+const knowledgeUI = window.ManagerKnowledge
+  ? window.ManagerKnowledge.create({ state, api, esc, icon, toast, confirmDialog })
+  : null;
+
+const costUI = window.ManagerCost
+  ? window.ManagerCost.create({ api, esc, icon, toast })
+  : null;
+
+const snapshotsUI = window.ManagerSnapshots
+  ? window.ManagerSnapshots.create({ state, api, esc, icon, toast, confirmDialog })
+  : null;
+
+const offsiteUI = window.ManagerOffsite
+  ? window.ManagerOffsite.create({ api, esc, icon, toast, confirmDialog })
+  : null;
+
+const voiceUI = window.ManagerVoice
+  ? window.ManagerVoice.create({ state, api, esc, icon, toast, confirmDialog, openModal, closeModal })
+  : null;
+
 const reviewUI = window.ManagerReview
   ? window.ManagerReview.create({ state, api, esc, icon, toast })
   : null;
@@ -218,6 +273,38 @@ const peopleUI = window.ManagerPeople
 
 const memesUI = window.ManagerMemes
   ? window.ManagerMemes.create({ state, api, esc, icon, toast })
+  : null;
+
+const imageMemesUI = window.ManagerImageMemes
+  ? window.ManagerImageMemes.create({
+      state, api, esc, icon, toast, confirmDialog,
+    })
+  : null;
+
+const mcpModeUI = window.ManagerMcpMode
+  ? window.ManagerMcpMode.create({
+      state, api, esc, icon, toast, confirmDialog,
+    })
+  : null;
+
+const nativeMcpUI = window.ManagerNativeMcp
+  ? window.ManagerNativeMcp.create({
+      state, api, esc, icon, toast, confirmDialog,
+    })
+  : null;
+
+const snowlumaUI = window.ManagerSnowLuma
+  ? window.ManagerSnowLuma.create({
+      state, api, esc, icon, toast, confirmDialog,
+    })
+  : null;
+
+const probabilityUI = window.ManagerProbability
+  ? window.ManagerProbability.create({ api, esc, icon, toast })
+  : null;
+
+const napcatProbabilityUI = window.ManagerNapcatProbability
+  ? window.ManagerNapcatProbability.create({ api, esc, icon, toast, confirmDialog })
   : null;
 
 const visionUI = window.ManagerVision
@@ -311,6 +398,12 @@ async function loadBootstrap() {
   state.settings = data.settings || {};
   state.instances = data.instances || [];
   state.env = data.env || {};
+  const installed = new Set();
+  state.instances.forEach((inst) => {
+    (inst.installed_plugins || []).forEach((id) => installed.add(String(id).toLowerCase()));
+  });
+  state.installedPlugins = installed;
+  applyNavVisibility();
   renderEnvChip();
 }
 
@@ -340,13 +433,15 @@ async function refreshAll(silent = false) {
 
 const ROUTES = {
   overview: { section: "overview", title: "总览", sub: "舰队健康、运行状态与异常入口", render: viewOverview },
+  functions: { section: "functions", title: "功能管理", sub: "同类功能已合并分组；也可以从总览点机器人卡片进入单机管理", render: viewFunctions },
+  bot: { section: "bots", title: "机器人功能", sub: "这台机器人独立的功能管理", render: viewBotWorkbench },
   hubBots: { section: "bots", title: "机器人", sub: "实例管理、私信收件箱与人工接管", render: viewHubBots },
   hubLive: { section: "presence", title: "活人感", sub: "连续生活线、群聊互动与人物档案", render: viewHubLive },
   hubGroup: { section: "group", title: "群聊", sub: "群聊安全、平台控制台与群聊剧场", render: viewHubGroup },
   hubPersona: { section: "personas", title: "人格", sub: "模型人格、说话风格与质量回归", render: viewHubPersona },
   hubMemory: { section: "memory", title: "记忆", sub: "记忆库、脑图与纠错闭环", render: viewHubMemory },
   hubAuto: { section: "automation", title: "自动化", sub: "自动化中心、审批队列、定时任务与舰队日报", render: viewHubAuto },
-  hubPlugin: { section: "capability", title: "插件", sub: "插件市场、已安装插件与 DSH 能力", render: viewHubPlugin },
+  hubPlugin: { section: "capability", title: "能力", sub: "插件市场、DSH、MCP 与知识库", render: viewHubPlugin },
   hubMonitor: { section: "monitor", title: "监控", sub: "回复复盘、实时思考、日志与巡检", render: viewHubMonitor },
   bots: { section: "bots", title: "机器人", sub: "新增、配置与启停每一个 QQ 机器人", render: viewBots },
   inbox: { section: "bots", title: "收件箱", sub: "QQ/B站/抖音私信与人工接管", render: viewInbox },
@@ -358,7 +453,13 @@ const ROUTES = {
   capDshPlugins: { section: "capability", title: "DSH 插件", sub: "运行 DSH、搜索并安装插件", render: viewCapDshPlugins },
   capDshSkills: { section: "capability", title: "DSH 技能", sub: "安装到 ~/.dsh/skills，DSH 新会话自动发现", render: viewCapDshSkills },
   capDshAccess: { section: "capability", title: "DSH 接入", sub: "把 DSH 接到 AstrBot，让 QQ 管理员调用", render: viewCapDshAccess },
+  mcpMode: { section: "capability", title: "Tulpa MCP（旧）", sub: "旧的 Tulpa + SnowLuma 模式，保留作回退", render: viewMcpMode },
+  nativeMcp: { section: "capability", title: "原生 MCP", sub: "管理器直接接管 QQ 并读取 LivingMemory、拟人、心情、关系、表情包", render: viewNativeMcp },
+  snowluma: { section: "capability", title: "SnowLuma", sub: "用 SnowLuma 替换 NapCat，AstrBot 插件与记忆保持不变", render: viewSnowLuma },
+  probability: { section: "capability", title: "Agent 概率回复", sub: "Agent 模式下群消息按概率进入 DSH / Codex 队列，被 @ 必回", render: viewProbability },
+  probabilityNapcat: { section: "capability", title: "NapCat 概率回复", sub: "普通模式群聊插件的初始接话概率、回复后概率与动态调整", render: viewNapcatProbability },
   capBili: { section: "group", title: "B站控制台", sub: "主动看片频率、互动开关与今日运行状态", render: viewCapBili },
+  capBiliPublish: { section: "group", title: "B站发布", sub: "bili-cli 登录、自动发布与投稿记录", render: viewBiliPublish },
   capDouyin: { section: "group", title: "抖音控制台", sub: "主动刷时隙、互动/评论开关与 QQ 汇报状态", render: viewCapDouyin },
   approvals: { section: "automation", title: "审批队列", sub: "插件写操作先入队，批准后才执行", render: viewApprovals },
   automationCenter: { section: "automation", title: "自动化中心", sub: "内置巡检、DSH 技能定时任务与实时运行监控", render: viewAutomationCenter },
@@ -380,6 +481,7 @@ const ROUTES = {
   life: { section: "presence", title: "连续生活线", sub: "按作息自动推进的日常状态、精力与今天做了什么", render: viewLife },
   people: { section: "presence", title: "人物档案", sub: "称呼、性格、喜好、雷区与最近印象，一个人一张卡", render: viewPeople },
   memes: { section: "presence", title: "群梗库", sub: "群里反复出现的梗与口头禅，确认后注入对话", render: viewMemes },
+  imageMemes: { section: "presence", title: "表情包", sub: "图片表情包、回复随机配图与手动测试", render: viewImageMemes },
   vision: { section: "presence", title: "看图接话", sub: "群图片的画面描述、主动接话与视觉模型设置", render: viewVision },
   evals: { section: "personas", title: "质量回归", sub: "固定用例评估人格回复的一致性与边界", render: viewEvals },
   review: { section: "monitor", title: "回复复盘", sub: "每条回复注入了哪些人格、记忆、身份校准与最终 system prompt", render: viewReview },
@@ -390,12 +492,85 @@ const ROUTES = {
   drift: { section: "monitor", title: "一致性", sub: "对比实例之间的插件、模型与人格差异", render: viewDrift },
   resources: { section: "monitor", title: "资源", sub: "系统 CPU/内存/磁盘与实例进程树", render: viewResources },
   canary: { section: "monitor", title: "巡检", sub: "只读端到端检查健康、登录、调度与备份", render: viewCanary },
+  knowledge: { section: "capability", title: "知识库", sub: "文档导入、向量检索与知识库管理", render: viewKnowledge },
+  voice: { section: "capability", title: "语音", sub: "把机器人回复转成语音，支持音色设计与声音克隆", render: viewVoice },
+  cost: { section: "monitor", title: "用量与成本", sub: "按实例、模型和日期统计 token 消耗与估算费用", render: viewCost },
+  snapshots: { section: "monitor", title: "配置快照", sub: "保存、对比与回滚实例和插件配置", render: viewSnapshots },
+  offsite: { section: "monitor", title: "异地备份", sub: "把本地备份自动上传到 WebDAV 并清理旧份", render: viewOffsite },
   settings: { section: "settings", title: "设置", sub: "源码与解释器路径、实例目录", render: viewSettings },
+  guide: { section: "guide", title: "使用教程", sub: "从安装部署到日常功能，一页学会牧鱼", render: viewGuide },
 };
 
-// 信息架构：侧边栏 10 个入口；每个 section 先进分组总览，再进具体功能页。
-// 同类型功能被收进同一个 group，旧 hash 仍可直接打开对应功能页。
+// 信息架构：侧边栏只保留 总览 / 机器人 / 功能管理 / 教程 / 设置。
+// 功能管理把同类型页面收进 5 个分组；旧 section 与旧 hash 仍可直接打开对应页面。
 const IA_GROUPS = {
+  // 合并后的跨机器人功能总览：原先 7 个管理分区按用途收敛成 5 组。
+  functions: {
+    hub: "functions",
+    groups: [
+      { name: "对话与人格", desc: "模型、人格、风格、心情、学习与评测", items: [
+        { route: "models", icon: "model" },
+        { route: "personaRelease", icon: "external" },
+        { route: "human", icon: "bots" },
+        { route: "mood", icon: "sun" },
+        { route: "learn", icon: "download" },
+        { route: "evals", icon: "check" },
+        { route: "voice", icon: "mic" },
+      ] },
+      { name: "群聊与活人感", desc: "生活线、群聊互动、人物关系、安全与平台控制台", items: [
+        { route: "life", icon: "sun" },
+        { route: "presenceRhythm", icon: "pulse" },
+        { route: "presenceDiary", icon: "edit" },
+        { route: "memes", icon: "model" },
+        { route: "imageMemes", icon: "fish" },
+        { route: "vision", icon: "search" },
+        { route: "presenceLoops", icon: "refresh" },
+        { route: "presenceRadar", icon: "pulse" },
+        { route: "people", icon: "bots" },
+        { route: "presenceRelations", icon: "memory" },
+        { route: "capGuard", icon: "alert" },
+        { route: "capOwner", icon: "check" },
+        { route: "capMatrix", icon: "settings" },
+        { route: "capBili", icon: "play" },
+        { route: "capBiliPublish", icon: "external" },
+        { route: "capDouyin", icon: "stop" },
+        { route: "duet", icon: "terminal" },
+      ] },
+      { name: "记忆与知识", desc: "记忆库、纠错闭环与知识库", items: [
+        { route: "memory", icon: "memory" },
+        { route: "memoryFix", icon: "edit" },
+        { route: "knowledge", icon: "memory" },
+      ] },
+      { name: "自动化与监控", desc: "任务、审批、日报、巡检、运行与运维", items: [
+        { route: "automationCenter", icon: "refresh" },
+        { route: "approvals", icon: "check" },
+        { route: "tasks", icon: "refresh" },
+        { route: "digest", icon: "logs" },
+        { route: "review", icon: "logs" },
+        { route: "think", icon: "terminal" },
+        { route: "qqlogin", icon: "terminal" },
+        { route: "logs", icon: "folder" },
+        { route: "alerts", icon: "alert" },
+        { route: "drift", icon: "settings" },
+        { route: "resources", icon: "pulse" },
+        { route: "canary", icon: "check" },
+        { route: "cost", icon: "model" },
+        { route: "snapshots", icon: "memory" },
+        { route: "offsite", icon: "download" },
+      ] },
+      { name: "能力与插件", desc: "插件市场、DSH、MCP、QQ 后端与概率回复", items: [
+        { route: "capMarket", icon: "market" },
+        { route: "capInstalled", icon: "folder" },
+        { route: "capDshPlugins", icon: "dsh" },
+        { route: "capDshSkills", icon: "download" },
+        { route: "capDshAccess", icon: "terminal" },
+        { route: "nativeMcp", icon: "terminal" },
+        { route: "snowluma", icon: "dsh" },
+        { route: "probability", icon: "pulse" },
+        { route: "probabilityNapcat", icon: "bots" },
+      ] },
+    ],
+  },
   bots: {
     hub: "hubBots",
     groups: [
@@ -413,6 +588,7 @@ const IA_GROUPS = {
       ] },
       { name: "群聊互动", desc: "群梗、看图接话、话题回访与读空气", items: [
         { route: "memes", icon: "model" },
+        { route: "imageMemes", icon: "fish" },
         { route: "vision", icon: "search" },
         { route: "presenceLoops", icon: "refresh" },
         { route: "presenceRadar", icon: "pulse" },
@@ -431,8 +607,9 @@ const IA_GROUPS = {
         { route: "capOwner", icon: "check" },
         { route: "capMatrix", icon: "settings" },
       ] },
-      { name: "平台控制台", desc: "B站与抖音的主动行为开关和运行状态", items: [
+      { name: "平台控制台", desc: "B站与抖音的主动行为开关与运行状态", items: [
         { route: "capBili", icon: "play" },
+        { route: "capBiliPublish", icon: "external" },
         { route: "capDouyin", icon: "stop" },
       ] },
       { name: "群聊剧场", desc: "两个机器人按话题真实轮流发言", items: [
@@ -451,6 +628,22 @@ const IA_GROUPS = {
         { route: "capDshPlugins", icon: "dsh" },
         { route: "capDshSkills", icon: "download" },
         { route: "capDshAccess", icon: "terminal" },
+      ] },
+      { name: "原生 MCP", desc: "管理器直接接管 QQ，Agent 可使用你的插件数据和记忆", items: [
+        { route: "nativeMcp", icon: "terminal" },
+      ] },
+      { name: "QQ 后端", desc: "SnowLuma 接管 QQ 进程，AstrBot 继续处理插件与记忆", items: [
+        { route: "snowluma", icon: "dsh" },
+      ] },
+      { name: "概率回复", desc: "Agent 模式抽签与 NapCat 普通模式接话概率分开管理", items: [
+        { route: "probability", icon: "pulse", label: "Agent 概率" },
+        { route: "probabilityNapcat", icon: "bots", label: "NapCat 概率" },
+      ] },
+      { name: "知识库", desc: "文档导入、向量检索与知识库管理", items: [
+        { route: "knowledge", icon: "memory" },
+      ] },
+      { name: "语音", desc: "回复转语音、音色设计与声音克隆", items: [
+        { route: "voice", icon: "mic" },
       ] },
     ],
   },
@@ -510,11 +703,16 @@ const IA_GROUPS = {
         { route: "resources", icon: "pulse" },
         { route: "canary", icon: "check" },
       ] },
+      { name: "成本与运维", desc: "模型花费、配置回滚与异地备份", items: [
+        { route: "cost", icon: "model" },
+        { route: "snapshots", icon: "memory" },
+        { route: "offsite", icon: "download" },
+      ] },
     ],
   },
 };
 
-const SECTION_NAME = { overview: "总览", bots: "机器人", group: "群聊", capability: "插件", automation: "自动化", memory: "记忆", personas: "人格", presence: "活人感", monitor: "监控", settings: "设置" };
+const SECTION_NAME = { overview: "总览", functions: "功能管理", bots: "机器人", group: "群聊", capability: "能力", automation: "自动化", memory: "记忆", personas: "人格", presence: "活人感", monitor: "监控", settings: "设置", guide: "教程" };
 const HUB_OF_SECTION = {};
 const SECTIONS = {};
 Object.keys(IA_GROUPS).forEach((section) => {
@@ -522,6 +720,72 @@ Object.keys(IA_GROUPS).forEach((section) => {
   SECTIONS[section] = IA_GROUPS[section].groups.reduce(
     (all, group) => all.concat(group.items.map((item) => item.route)), []);
 });
+
+// 页面依赖的 AstrBot 插件目录名；未安装时隐藏入口，避免打开只会报错的管理页。
+const PLUGIN_PAGES = {
+  hubLive: "astrbot_plugin_human_presence",
+  life: "astrbot_plugin_human_presence",
+  presenceRhythm: "astrbot_plugin_human_presence",
+  presenceDiary: "astrbot_plugin_human_presence",
+  presenceLoops: "astrbot_plugin_human_presence",
+  presenceRelations: "astrbot_plugin_human_presence",
+  presenceRadar: "astrbot_plugin_human_presence",
+  people: "astrbot_plugin_human_presence",
+  memes: "astrbot_plugin_human_presence",
+  vision: "astrbot_plugin_human_presence",
+  imageMemes: "meme_manager",
+  hubMemory: "astrbot_plugin_livingmemory",
+  memory: "astrbot_plugin_livingmemory",
+  memoryFix: "astrbot_plugin_livingmemory",
+  mood: "astrbot_plugin_daily_mood",
+  human: "astrbot_plugin_human_mode",
+  capGuard: "astrbot_plugin_dafeiyu_clean",
+  capOwner: "astrbot_plugin_dafeiyu_clean",
+  review: "astrbot_plugin_dafeiyu_clean",
+  capBili: "astrbot_plugin_bilibili_ai_bot",
+  capBiliPublish: "astrbot_plugin_bilibili_ai_bot",
+  capDouyin: "astrbot_plugin_douyin_dm",
+  duet: "astrbot_plugin_fleet_duet",
+  inbox: "astrbot_plugin_fleet_inbox",
+  probabilityNapcat: "astrbot_plugin_group_chat_plus",
+  think: "astrbot_plugin_think_bridge",
+  capDshAccess: "astrbot_plugin_dsh_bridge",
+};
+
+const PLUGIN_LABELS = {
+  astrbot_plugin_human_presence: "活人感",
+  meme_manager: "表情包管理器",
+  astrbot_plugin_livingmemory: "长期记忆",
+  astrbot_plugin_daily_mood: "每日心情",
+  astrbot_plugin_human_mode: "人类模式",
+  astrbot_plugin_dafeiyu_clean: "回复防护",
+  astrbot_plugin_bilibili_ai_bot: "B站 AI Bot",
+  astrbot_plugin_douyin_dm: "抖音私信",
+  astrbot_plugin_fleet_duet: "群聊剧场",
+  astrbot_plugin_fleet_inbox: "收件箱接管",
+  astrbot_plugin_group_chat_plus: "群聊增强",
+  astrbot_plugin_think_bridge: "思考桥接",
+  astrbot_plugin_dsh_bridge: "DSH 智能体桥接",
+};
+
+function routeAvailable(route) {
+  const pluginId = PLUGIN_PAGES[route];
+  if (!pluginId) return true;
+  return state.installedPlugins.has(pluginId.toLowerCase());
+}
+
+function applyNavVisibility() {
+  $$("#nav a").forEach((link) => {
+    const section = link.dataset.route;
+    if (!section || section === "overview" || section === "settings" || section === "guide") {
+      link.style.display = "";
+      return;
+    }
+    const hub = HUB_OF_SECTION[section];
+    const available = (hub && routeAvailable(hub)) || (SECTIONS[section] || []).some(routeAvailable);
+    link.style.display = available ? "" : "none";
+  });
+}
 
 function groupOf(sectionId, leaf) {
   const def = IA_GROUPS[sectionId];
@@ -534,11 +798,12 @@ function tabBarHtml(sectionId, activeLeaf) {
   if (!hub || activeLeaf === hub) return "";
   const back = `<a class="sub-back" href="#/${hub}">‹ ${esc(SECTION_NAME[sectionId] || "总览")}</a>`;
   const group = groupOf(sectionId, activeLeaf);
-  if (!group || group.items.length < 2) {
+  const items = group ? group.items.filter((item) => routeAvailable(item.route)) : [];
+  if (!group || items.length < 2) {
     return `<div class="subbar">${back}</div>`;
   }
   return `<div class="subbar">${back}<span class="sub-group">${esc(group.name)}</span>
-    <nav class="tabs">${group.items.map((item) =>
+    <nav class="tabs">${items.map((item) =>
       `<a class="tab ${item.route === activeLeaf ? "active" : ""}" href="#/${item.route}">${esc(item.label || ROUTES[item.route].title)}</a>`).join("")}</nav></div>`;
 }
 
@@ -570,14 +835,33 @@ async function finishOnboarding() {
   }
 }
 
+function navKeyOf(section) {
+  if (section === "overview" || section === "bots" || section === "functions"
+    || section === "settings" || section === "guide") return section;
+  return "functions";
+}
+
 async function navigate(silent = false) {
-  // 本机还没有任何机器人时，只展示一键部署首屏，隐藏全部管理功能。
-  if (!state.instances.length) {
+  const raw = location.hash.replace(/^#\/?/, "") || "overview";
+  const [pathPart, queryPart = ""] = raw.split("?");
+  const segments = pathPart.split("/").filter(Boolean);
+  const pathBot = segments[0] === "bot" ? decodeURIComponent(segments[1] || "") : "";
+  const queryBot = new URLSearchParams(queryPart).get("bot") || "";
+  const requestedBot = pathBot || queryBot;
+  const hash = segments[0] || "overview";
+  if (requestedBot && state.instances.some((i) => i.id === requestedBot)) {
+    ManagerFocus.set(requestedBot);
+    // 由当前页面直接管理的实例选择也跟随本次进入的机器人。
+    ["pluginInst", "modelInst", "learnInst", "qrInst", "logInst"].forEach((key) => {
+      state[key] = requestedBot;
+    });
+  }
+  // 本机还没有任何机器人时只展示一键部署首屏；教程页仍然可以打开。
+  if (!state.instances.length && hash !== "guide") {
     await renderOnboarding();
     return;
   }
   document.body.classList.remove("onboarding");
-  const hash = location.hash.replace(/^#\/?/, "") || "overview";
   const resolved = window.ManagerIA
     ? window.ManagerIA.resolveRoute(hash)
     : { route: ROUTES[hash] ? hash : "overview", redirect: false };
@@ -587,9 +871,29 @@ async function navigate(silent = false) {
   }
   const route = ROUTES[resolved.route] ? resolved.route : "overview";
   const section = ROUTES[route].section;
+  if (route === "bot" && !state.instances.some((i) => i.id === ManagerFocus.id)) {
+    toast("机器人不存在或已被删除", "warn");
+    location.replace("#/overview");
+    return;
+  }
+  if (!routeAvailable(route)) {
+    const hub = HUB_OF_SECTION[section];
+    const fallback = hub && routeAvailable(hub) ? hub : "overview";
+    const label = PLUGIN_LABELS[PLUGIN_PAGES[route]] || PLUGIN_PAGES[route];
+    toast(`该功能需要先安装「${label}」插件`, "warn");
+    location.replace(`#/${fallback}`);
+    return;
+  }
+  state.botId = route === "bot" ? ManagerFocus.id : "";
   if (state.route !== route) {
     memoryUI?.leave();
     dshUI?.leave();
+    mcpModeUI?.leave();
+    nativeMcpUI?.leave();
+    snowlumaUI?.leave();
+    probabilityUI?.leave();
+    napcatProbabilityUI?.leave();
+    biliPublishUI?.leave();
     inboxUI?.leave();
     approvalsUI?.leave();
     automationCenterUI?.leave();
@@ -601,6 +905,11 @@ async function navigate(silent = false) {
     moodUI?.leave();
     presenceUI?.leave();
     opsUI?.leave();
+    knowledgeUI?.leave();
+    costUI?.leave();
+    snapshotsUI?.leave();
+    offsiteUI?.leave();
+    voiceUI?.leave();
     clearLogTimer();
     clearQrTimer();
     clearAutoTimer();
@@ -608,10 +917,17 @@ async function navigate(silent = false) {
   }
   state.route = route;
 
-  // 导航按 section 高亮；顶栏显示 section 名 + 当前 leaf 的描述。
-  $$("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === section));
-  $("#page-title").textContent = SECTION_NAME[section];
-  $("#page-sub").textContent = ROUTES[route].sub;
+  // 导航按合并后的入口高亮；顶栏显示当前功能分区 + 页面描述。
+  const navKey = navKeyOf(section);
+  $$("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === navKey));
+  if (route === "bot") {
+    const inst = state.instances.find((item) => item.id === state.botId);
+    $("#page-title").textContent = inst ? inst.name : "机器人功能";
+    $("#page-sub").textContent = "这台机器人独立的功能管理";
+  } else {
+    $("#page-title").textContent = SECTION_NAME[section];
+    $("#page-sub").textContent = ROUTES[route].sub;
+  }
 
   const view = $("#view");
   const tabs = tabBarHtml(section, route);
@@ -628,6 +944,7 @@ async function navigate(silent = false) {
   } catch (err) {
     target.innerHTML = `<div class="empty">${icon("alert")}<h4>加载失败</h4><p>${esc(err.message)}</p></div>`;
   }
+  ManagerFocus.clearPending();
   renderEnvChip();
 }
 
@@ -702,7 +1019,7 @@ async function viewOverview(view) {
 
     <div class="section-head">
       <h2>机器人舰队</h2>
-      <div class="side">${insts.length ? "点击进入机器人页管理" : "还没有接入任何机器人"}</div>
+      <div class="side">${insts.length ? "点击机器人卡片进入它的独立功能管理" : "还没有接入任何机器人"}</div>
     </div>
     ${insts.length ? `<div class="bot-grid" id="bot-grid">${insts.map(botCard).join("")}</div>` :
       `<div class="empty">${icon("bots")}<h4>还没有机器人</h4>
@@ -750,7 +1067,7 @@ function botCard(inst) {
       ? "未登录"
       : "未配置";
   return `
-    <div class="bot-card ${running ? "running" : ""}" data-sum="${inst.id}">
+    <a class="bot-card ${running ? "running" : ""}" href="#/bot/${esc(inst.id)}" data-sum="${inst.id}">
       <div class="bot-head">
         <div class="avatar" style="${avatarStyle(inst.color || "#5b8cff")}">${esc(initials(inst.name))}</div>
         <div class="bot-id">
@@ -772,9 +1089,9 @@ function botCard(inst) {
         <div class="item"><b>插件数量</b><span data-plugins>—</span></div>
       </div>
       <div class="bot-actions">
-        <button class="btn sm ghost" data-go="#/bots">${icon("bots")}进入机器人页</button>
+        <span class="btn sm ghost">${icon("settings")}进入功能管理</span>
       </div>
-    </div>`;
+    </a>`;
 }
 
 function bindBotActions(root) {
@@ -1636,7 +1953,7 @@ async function viewPlugins(view) {
     return;
   }
   if (!state.pluginInst || !state.instances.find((i) => i.id === state.pluginInst)) {
-    state.pluginInst = state.instances[0].id;
+    state.pluginInst = (ManagerFocus.pick(state.instances) || state.instances[0]).id;
   }
   const inst = state.instances.find((i) => i.id === state.pluginInst) || state.instances[0];
 
@@ -1648,6 +1965,7 @@ async function viewPlugins(view) {
     <div class="chips" id="pl-chips">
       ${state.instances.map((i) => `<button class="chip ${i.id === inst.id ? "active" : ""}" data-inst="${i.id}">${esc(i.name)}${i.status?.running ? "" : "（未运行）"}</button>`).join("")}
     </div>
+    <div id="pl-suite"><div class="skeleton" style="height:120px"></div></div>
     <div id="pl-body"><div class="skeleton" style="height:120px"></div></div>`;
 
   const qInput = $("#pl-q", view);
@@ -1671,7 +1989,144 @@ async function viewPlugins(view) {
     pluginInstallModal(view, inst);
   });
 
-  await loadPlugins(view, inst);
+  await Promise.all([loadPlugins(view, inst), loadPluginSuite(view, inst)]);
+}
+
+async function loadPluginSuite(view, inst) {
+  const box = $("#pl-suite", view);
+  if (!box) return;
+  try {
+    const data = await api(`/api/instances/${inst.id}/plugin-suite`);
+    renderPluginSuite(view, inst, box, data || {});
+  } catch (err) {
+    box.innerHTML = `<div class="empty" style="padding:18px">${icon("alert")}<h4>套装读取失败</h4><p>${esc(err.message)}</p></div>`;
+  }
+}
+
+function suiteRow(item, mode) {
+  const install = mode === "install";
+  const disabled = install && !item.available;
+  return `
+    <label class="plugin-row" style="cursor:${disabled ? "not-allowed" : "pointer"}">
+      <div class="plugin-row-main">
+        <div class="plugin-row-title">
+          <strong>${esc(item.label)}</strong>
+          <span class="badge ${install ? "" : "ok"}">${install ? "待安装" : "已安装"}</span>
+          ${disabled ? '<span class="badge bad">缺少安装源</span>' : ""}
+        </div>
+        <div class="plugin-row-meta">${esc(item.id)}</div>
+        <div class="plugin-row-desc">${esc(item.note || "暂无说明")}</div>
+      </div>
+      <div class="plugin-row-actions">
+        <input type="checkbox" ${install ? `data-suite-install="${esc(item.id)}"` : `data-suite-uninstall="${esc(item.id)}"`} ${disabled ? "disabled" : ""}>
+      </div>
+    </label>`;
+}
+
+function renderPluginSuite(view, inst, box, data) {
+  const suite = Array.isArray(data.suite) ? data.suite : [];
+  const pending = suite.filter((item) => !item.installed);
+  const installed = suite.filter((item) => item.installed);
+  const canUninstall = Boolean(inst.status?.running);
+  box.innerHTML = `
+    <div class="card" style="padding:16px;margin-top:14px">
+      <div class="section-head" style="margin:0 0 8px">
+        <h2>我的插件套装</h2>
+        <span class="badge">已安装 ${installed.length}/${suite.length}</span>
+      </div>
+      <p class="hint-text" style="margin:0 0 12px">按需勾选安装，不会部署全部插件；安装完成后对应管理页会自动出现。</p>
+      <div class="plugin-list-head">待安装（${pending.length}）</div>
+      ${pending.length ? pending.map((item) => suiteRow(item, "install")).join("") : '<p class="hint-text">套装插件都已安装。</p>'}
+      <div class="chips" style="margin:10px 0 16px">
+        <button class="btn sm primary" id="pl-suite-install">安装选中</button>
+      </div>
+      <div class="plugin-list-head">已安装（可卸载 ${installed.length}）</div>
+      ${installed.length ? installed.map((item) => suiteRow(item, "uninstall")).join("") : '<p class="hint-text">还没有安装套装内插件。</p>'}
+      <div class="chips" style="margin:10px 0 0">
+        <button class="btn sm danger" id="pl-suite-uninstall" ${canUninstall ? "" : "disabled"}>卸载选中</button>
+        ${canUninstall ? "" : '<span class="hint-text">机器人未运行，卸载前请先启动。</span>'}
+      </div>
+      <div class="hint-text" id="pl-suite-status" style="margin-top:10px"></div>
+    </div>`;
+  $("#pl-suite-install", box).addEventListener("click", () => installSuiteSelected(view, inst, box));
+  $("#pl-suite-uninstall", box).addEventListener("click", () => uninstallSuiteSelected(view, inst, box));
+}
+
+async function waitPluginJob(job, status) {
+  let current = job;
+  while (current && current.state === "running") {
+    if (status) {
+      const steps = (current.steps || []).map((step) => {
+        const mark = step.state === "ok" ? "✓" : step.state === "fail" ? "✕" : step.state === "running" ? "…" : "·";
+        return `${mark} ${esc(step.label)}${step.detail ? `（${esc(step.detail)}）` : ""}`;
+      }).join("<br>");
+      status.innerHTML = `${esc(current.message || "正在安装")}<br>${steps}`;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    current = await api(`/api/deploy/install/jobs/${job.id}`);
+  }
+  const message = current?.message || "安装完成";
+  if (status) status.textContent = message;
+  toast(message, current?.state === "failed" ? "err" : "ok");
+  return current;
+}
+
+async function installSuiteSelected(view, inst, box) {
+  const ids = $$("[data-suite-install]", box).filter((node) => node.checked)
+    .map((node) => node.dataset.suiteInstall);
+  if (!ids.length) { toast("请先勾选要安装的插件", "warn"); return; }
+  const btn = $("#pl-suite-install", box);
+  const status = $("#pl-suite-status", box);
+  btn.disabled = true;
+  if (status) status.textContent = "正在提交安装任务…";
+  try {
+    const job = await api(`/api/instances/${inst.id}/plugin-suite/install`, {
+      method: "POST",
+      body: { plugins: ids },
+    });
+    toast(`已开始安装 ${ids.length} 个插件`);
+    await waitPluginJob(job, status);
+    await loadBootstrap();
+    if (state.route === "capInstalled") await viewPlugins(view);
+  } catch (err) {
+    toast(err.message, "err");
+    if (status) status.textContent = err.message;
+    btn.disabled = false;
+  }
+}
+
+async function uninstallSuiteSelected(view, inst, box) {
+  const ids = $$("[data-suite-uninstall]", box).filter((node) => node.checked)
+    .map((node) => node.dataset.suiteUninstall);
+  if (!ids.length) { toast("请先勾选要卸载的插件", "warn"); return; }
+  const ok = await confirmDialog(
+    "卸载所选插件",
+    `将卸载 ${ids.length} 个插件：${ids.join("、")}\n\n卸载会删除插件目录，不可撤销。`,
+    true);
+  if (!ok) return;
+  const btn = $("#pl-suite-uninstall", box);
+  const status = $("#pl-suite-status", box);
+  btn.disabled = true;
+  if (status) status.textContent = "正在卸载…";
+  try {
+    const result = await api(`/api/instances/${inst.id}/plugin-suite/uninstall`, {
+      method: "POST",
+      body: { plugins: ids },
+    });
+    const failed = result?.failed || [];
+    const removed = result?.removed || [];
+    toast(removed.length ? `已卸载 ${removed.length} 个插件` : "没有插件被卸载",
+      failed.length ? "warn" : "ok");
+    if (status) {
+      status.innerHTML = failed.map((item) => `${esc(item.id)}：${esc(item.error)}`).join("<br>");
+    }
+    await loadBootstrap();
+    if (state.route === "capInstalled") await viewPlugins(view);
+  } catch (err) {
+    toast(err.message, "err");
+    if (status) status.textContent = err.message;
+    btn.disabled = false;
+  }
 }
 
 async function loadPlugins(view, inst, boxSelector = "#pl-body") {
@@ -1790,6 +2245,14 @@ function viewBiliConsole(view) {
     return;
   }
   return consoleUI.viewBili(view);
+}
+
+function viewBiliPublish(view) {
+  if (!biliPublishUI) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>B站发布模块未加载</h4><p>请刷新页面后重试。</p></div>`;
+    return;
+  }
+  return biliPublishUI.render(view);
 }
 
 function viewDouyinConsole(view) {
@@ -1936,12 +2399,197 @@ function viewMemes(view) {
   return memesUI.render(view);
 }
 
+function viewImageMemes(view) {
+  if (!imageMemesUI) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>表情包模块未加载</h4><p>请刷新页面后重试。</p></div>`;
+    return;
+  }
+  return imageMemesUI.render(view);
+}
+
+function viewMcpMode(view) {
+  if (!mcpModeUI) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>Tulpa MCP 模块未加载</h4><p>请刷新页面后重试。</p></div>`;
+    return;
+  }
+  return mcpModeUI.render(view);
+}
+
+function viewNativeMcp(view) {
+  if (!nativeMcpUI) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>原生 MCP 模块未加载</h4><p>请刷新页面后重试。</p></div>`;
+    return;
+  }
+  return nativeMcpUI.render(view);
+}
+
+function viewSnowLuma(view) {
+  if (!snowlumaUI) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>SnowLuma 模块未加载</h4><p>请刷新页面后重试。</p></div>`;
+    return;
+  }
+  return snowlumaUI.render(view);
+}
+
+function viewProbability(view) {
+  if (!probabilityUI) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>概率回复模块未加载</h4><p>请刷新页面后重试。</p></div>`;
+    return;
+  }
+  return probabilityUI.render(view);
+}
+
+function viewNapcatProbability(view) {
+  if (!napcatProbabilityUI) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>NapCat 概率模块未加载</h4><p>请刷新页面后重试。</p></div>`;
+    return;
+  }
+  return napcatProbabilityUI.render(view);
+}
+
 function viewVision(view) {
   if (!visionUI) {
     view.innerHTML = `<div class="empty">${icon("alert")}<h4>看图模块未加载</h4><p>请刷新页面后重试。</p></div>`;
     return;
   }
   return visionUI.render(view);
+}
+
+function functionCardHtml(item, botId = "") {
+  const meta = ROUTES[item.route] || {};
+  const href = botId
+    ? `#/${item.route}?bot=${encodeURIComponent(botId)}`
+    : `#/${item.route}`;
+  return `
+    <a class="hub-card" href="${href}">
+      <span class="hub-icon">${icon(item.icon || "model")}</span>
+      <span class="hub-card-text">
+        <b>${esc(item.label || meta.title || item.route)}</b>
+        <p>${esc(meta.sub || "")}</p>
+      </span>
+      <span class="hub-arrow">›</span>
+    </a>`;
+}
+
+function viewFunctions(view) {
+  const groups = IA_GROUPS.functions.groups
+    .map((group) => ({ ...group, items: (group.items || []).filter((item) => routeAvailable(item.route)) }))
+    .filter((group) => group.items.length);
+  view.innerHTML = `
+    <div class="hub-hero">
+      <h2>功能管理</h2>
+      <p>同类功能已合并成 5 组。要管理某个机器人，直接点下面的机器人卡片进入它的独立功能页。</p>
+      ${state.instances.length ? `<div class="chips" style="margin-top:14px">
+        ${state.instances.map((inst) => `<a class="chip" href="#/bot/${esc(inst.id)}">${esc(inst.name)}</a>`).join("")}
+      </div>` : ""}
+    </div>
+    ${groups.length ? `<div class="hub-groups">
+      ${groups.map((group) => `
+        <section class="hub-group">
+          <div class="hub-group-head"><h3>${esc(group.name)}</h3><p>${esc(group.desc || "")}</p></div>
+          <div class="hub-cards">${group.items.map((item) => functionCardHtml(item)).join("")}</div>
+        </section>`).join("")}
+    </div>` : `<div class="empty">${icon("market")}<h4>还没有可用的管理页</h4>
+      <p>功能依赖的插件尚未安装，可到插件市场安装后再回来。</p>
+      <a class="btn primary" href="#/capMarket">去插件市场</a></div>`}`;
+}
+
+function botPluginSet(inst) {
+  return new Set((inst?.installed_plugins || []).map((id) => String(id).toLowerCase()));
+}
+
+// 单机工作台按“这台机器人自己的插件目录”过滤功能，而不是全舰队并集。
+function botRouteAvailable(route, inst) {
+  const pluginId = PLUGIN_PAGES[route];
+  if (!pluginId) return true;
+  if (Array.isArray(inst?.installed_plugins)) return botPluginSet(inst).has(pluginId.toLowerCase());
+  return routeAvailable(route);
+}
+
+function viewBotWorkbench(view) {
+  const inst = state.instances.find((item) => item.id === ManagerFocus.id);
+  if (!inst) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>机器人不存在</h4>
+      <p>可能已被删除，回到总览重新选择。</p><a class="btn primary" href="#/overview">回总览</a></div>`;
+    return;
+  }
+  const running = Boolean(inst.status?.running);
+  const managed = Boolean(inst.status?.managed);
+  const napcat = inst.napcat || {};
+  const napcatLabel = napcat.running ? "已连接" : napcat.configured ? "未登录" : "未配置";
+  const groups = IA_GROUPS.functions.groups
+    .map((group) => ({ ...group, items: (group.items || []).filter((item) => botRouteAvailable(item.route, inst)) }))
+    .filter((group) => group.items.length);
+  const pluginIds = inst.installed_plugins || [];
+  const pluginChips = pluginIds.length
+    ? pluginIds.map((id) => `<span class="chip">${esc(PLUGIN_LABELS[String(id).toLowerCase()] || id)}</span>`).join("")
+    : `<span class="bw-muted">这台机器人还没有安装插件</span>`;
+
+  view.innerHTML = `
+    <div class="bw-back"><a class="sub-back" href="#/overview">‹ 总览</a></div>
+    <section class="card bw-hero">
+      <div class="bw-hero-main">
+        <div class="avatar" style="width:54px;height:54px;border-radius:15px;font-size:19px;${avatarStyle(inst.color || "#5b8cff")}">${esc(initials(inst.name))}</div>
+        <div class="bw-id">
+          <h2>${esc(inst.name)}
+            <span class="badge ${running ? "ok" : "bad"}"><span class="status-dot ${running ? "on" : "off"}"></span>${running ? "运行中" : "已停止"}</span>
+            ${running && !managed ? `<span class="badge warn">外部进程</span>` : ""}
+          </h2>
+          <p>QQ ${esc(inst.qq || "未绑定")} · Dashboard ${esc(inst.dash_port)} · WS ${esc(inst.ws_port || "—")} · NapCat ${esc(napcatLabel)}</p>
+          <div class="bw-meta">
+            <span>当前模型 <b data-model>读取中…</b></span>
+            <span>插件数量 <b data-plugins>—</b></span>
+          </div>
+        </div>
+        <div class="bw-actions">
+          <button class="btn sm ${running ? "ghost" : "primary"}" data-act="${running ? "stop" : "start"}" data-id="${inst.id}">${icon(running ? "stop" : "play")}${running ? "停止" : "启动"}</button>
+          <button class="btn sm ghost" data-act="restart" data-id="${inst.id}" ${running ? "" : "disabled"}>${icon("restart")}重启</button>
+          <button class="btn sm ghost" data-act="panel" data-id="${inst.id}">${icon("external")}Dashboard</button>
+          <button class="btn sm ghost" data-act="logs" data-id="${inst.id}">${icon("logs")}日志</button>
+          ${running && !managed ? `<button class="btn sm ghost" data-act="adopt" data-id="${inst.id}">${icon("check")}接管</button>` : ""}
+          <button class="btn sm ghost" data-napcat="${inst.id}" ${napcat.configured ? "" : "disabled"}>${icon("pulse")}扫码 / 控制台</button>
+        </div>
+      </div>
+      <div class="bw-foot">
+        <div class="bw-plugins"><span class="bw-label">已装插件</span><div class="chips">${pluginChips}</div></div>
+        <div class="bw-tools">
+          <button class="btn sm ghost" data-detail="${inst.id}">详情</button>
+          <button class="btn sm ghost" data-edit="${inst.id}">${icon("edit")}编辑</button>
+          <a class="btn sm ghost" href="#/capInstalled?bot=${esc(inst.id)}">${icon("folder")}插件管理</a>
+        </div>
+      </div>
+    </section>
+
+    <div class="section-head">
+      <h2>这台机器人的功能</h2>
+      <div class="side">只显示已装插件对应的管理页</div>
+    </div>
+    ${groups.length ? `<div class="hub-groups">
+      ${groups.map((group) => `
+        <section class="hub-group">
+          <div class="hub-group-head"><h3>${esc(group.name)}</h3><p>${esc(group.desc || "")}</p></div>
+          <div class="hub-cards">${group.items.map((item) => functionCardHtml(item, inst.id)).join("")}</div>
+        </section>`).join("")}
+    </div>` : `<div class="empty">${icon("market")}<h4>这台机器人还没有可用功能</h4>
+      <p>先到插件市场安装需要的插件，功能入口会自动出现。</p>
+      <a class="btn primary" href="#/capMarket?bot=${esc(inst.id)}">去插件市场</a></div>`}`;
+
+  bindBotActions(view);
+  $$("[data-napcat]", view).forEach((btn) =>
+    btn.addEventListener("click", () => openBotDetail(inst.id, "login")));
+  $$("[data-detail]", view).forEach((btn) =>
+    btn.addEventListener("click", () => openBotDetail(inst.id)));
+  $$("[data-edit]", view).forEach((btn) =>
+    btn.addEventListener("click", () => editBotModal(inst.id)));
+
+  hydrateSummaries([inst.id], () => {
+    if (state.route !== "bot" || state.botId !== inst.id) return;
+    const summary = state.summaries[inst.id]?.data;
+    const model = view.querySelector("[data-model]");
+    const plugins = view.querySelector("[data-plugins]");
+    if (model) model.textContent = pickModel(summary);
+    if (plugins) plugins.textContent = pickPluginCount(summary);
+  });
 }
 
 function renderHub(view, route) {
@@ -1951,10 +2599,22 @@ function renderHub(view, route) {
   }
   const section = ROUTES[route].section;
   const def = IA_GROUPS[section];
+  const groups = ((def && def.groups) || [])
+    .map((group) => ({
+      ...group,
+      items: (group.items || []).filter((item) => routeAvailable(item.route)),
+    }))
+    .filter((group) => group.items.length);
+  if (!groups.length) {
+    view.innerHTML = `<div class="empty">${icon("market")}<h4>还没有可用的管理页</h4>
+      <p>这一组功能依赖的插件尚未安装，可到「能力 → AstrBot 已安装」安装插件套装。</p>
+      <a class="btn primary" href="#/capInstalled">去安装插件</a></div>`;
+    return;
+  }
   return hubUI.render(view, {
     title: SECTION_NAME[section] || ROUTES[route].title,
     desc: ROUTES[route].sub,
-    groups: (def && def.groups) || [],
+    groups,
   });
 }
 
@@ -1997,6 +2657,46 @@ function viewCanary(view) {
     return;
   }
   return opsUI.renderCanary(view);
+}
+
+function viewKnowledge(view) {
+  if (!knowledgeUI) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>知识库模块未加载</h4><p>请刷新页面后重试。</p></div>`;
+    return;
+  }
+  return knowledgeUI.render(view);
+}
+
+function viewCost(view) {
+  if (!costUI) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>成本模块未加载</h4><p>请刷新页面后重试。</p></div>`;
+    return;
+  }
+  return costUI.render(view);
+}
+
+function viewSnapshots(view) {
+  if (!snapshotsUI) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>快照模块未加载</h4><p>请刷新页面后重试。</p></div>`;
+    return;
+  }
+  return snapshotsUI.render(view);
+}
+
+function viewOffsite(view) {
+  if (!offsiteUI) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>异地备份模块未加载</h4><p>请刷新页面后重试。</p></div>`;
+    return;
+  }
+  return offsiteUI.render(view);
+}
+
+function viewVoice(view) {
+  if (!voiceUI) {
+    view.innerHTML = `<div class="empty">${icon("alert")}<h4>语音模块未加载</h4><p>请刷新页面后重试。</p></div>`;
+    return;
+  }
+  return voiceUI.render(view);
 }
 
 function viewMemory(view) {
@@ -2221,7 +2921,7 @@ async function viewModels(view) {
     view.innerHTML = `<div class="empty">${icon("model")}<h4>没有可用实例</h4><p>请先新增或接入机器人。</p></div>`;
     return;
   }
-  if (!state.modelInst) state.modelInst = state.instances[0].id;
+  if (!state.modelInst) state.modelInst = (ManagerFocus.pick(state.instances) || state.instances[0]).id;
   const inst = state.instances.find((i) => i.id === state.modelInst) || state.instances[0];
 
   view.innerHTML = `
@@ -2800,7 +3500,7 @@ async function viewLearn(view) {
     return;
   }
   if (!state.learnInst || !state.instances.find((i) => i.id === state.learnInst)) {
-    state.learnInst = state.instances[0].id;
+    state.learnInst = (ManagerFocus.pick(state.instances) || state.instances[0]).id;
   }
   const inst = state.instances.find((i) => i.id === state.learnInst) || state.instances[0];
 
@@ -3302,7 +4002,7 @@ async function viewQrLogin(view) {
     return;
   }
   if (!state.qrInst || !state.instances.some((i) => i.id === state.qrInst)) {
-    state.qrInst = state.instances[0].id;
+    state.qrInst = (ManagerFocus.pick(state.instances) || state.instances[0]).id;
   }
   view.innerHTML = `
     <div class="qr-page">
@@ -3418,7 +4118,7 @@ async function viewLogs(view) {
     return;
   }
   if (!state.logInst || !state.instances.find((i) => i.id === state.logInst)) {
-    state.logInst = state.instances[0].id;
+    state.logInst = (ManagerFocus.pick(state.instances) || state.instances[0]).id;
   }
   view.innerHTML = `
     <div class="log-toolbar">
@@ -3728,6 +4428,117 @@ function tickThinkCards() {
 }
 
 
+/* ------------------------------------------------------------- guide */
+
+function viewGuide(view) {
+  view.innerHTML = `
+    <div class="guide-hero">
+      <div>
+        <span class="guide-kicker">牧鱼 · 使用教程</span>
+        <h2>从安装到日常运维，一页学会</h2>
+        <p>牧鱼是本机的 AstrBot 多机器人管理台。按下面的顺序操作，第一次也能把机器人完整跑起来。</p>
+        <div class="guide-quick">
+          <button data-target="guide-install">① 安装与启动</button>
+          <button data-target="guide-first">② 部署第一个机器人</button>
+          <button data-target="guide-login">③ 扫码登录</button>
+          <button data-target="guide-faq">④ 常见问题</button>
+        </div>
+      </div>
+      <div class="guide-hero-side">
+        <b>全程本地运行</b>
+        <span>配置、日志与备份都保存在这台电脑，不上传云端。</span>
+      </div>
+    </div>
+
+    <div class="guide-layout">
+      <aside class="guide-toc">
+        <div class="guide-toc-title">目录</div>
+        <button data-target="guide-install">01 安装与启动</button>
+        <button data-target="guide-first">02 部署第一个机器人</button>
+        <button data-target="guide-login">03 启动与扫码登录</button>
+        <button data-target="guide-daily">04 日常管理</button>
+        <button data-target="guide-advanced">05 进阶功能</button>
+        <button data-target="guide-data">06 数据与备份</button>
+        <button data-target="guide-faq">07 常见问题</button>
+      </aside>
+
+      <div class="guide-main">
+        <section class="card guide-sec" id="guide-install">
+          <div class="guide-head"><span class="guide-num">01</span><h3>安装与启动</h3></div>
+          <div class="guide-step"><span class="step-no">1</span><div><b>安装管理器（推荐）</b><p>双击 <code>Muyu-Setup-版本号.exe</code>，按向导下一步即可。安装在当前用户目录，不需要管理员权限，也不会写入系统目录。</p></div></div>
+          <div class="guide-step"><span class="step-no">2</span><div><b>或使用免安装版</b><p>解压 <code>Muyu-Client-版本号.zip</code>，进入 <code>牧鱼</code> 文件夹，双击 <code>牧鱼.exe</code> 运行。</p></div></div>
+          <div class="guide-step"><span class="step-no">3</span><div><b>首次打开</b><p>管理器会先检测本机环境，右下角显示「环境就绪」后即可继续。没有检测到 AstrBot 时，会进入「一键部署」首屏。</p></div></div>
+          <div class="guide-tip">安装包与免安装版功能完全一致。区别只是安装包会创建开始菜单快捷方式，免安装版解压即用。</div>
+        </section>
+
+        <section class="card guide-sec" id="guide-first">
+          <div class="guide-head"><span class="guide-num">02</span><h3>部署第一个机器人</h3></div>
+          <div class="guide-step"><span class="step-no">1</span><div><b>使用一键部署</b><p>首次打开且本机没有实例时，页面会显示「一键部署」。填写机器人名称、QQ 号与模型 API Key，选择要使用的模型供应商。</p></div></div>
+          <div class="guide-step"><span class="step-no">2</span><div><b>等待自动安装</b><p>点击「一键部署」后，管理器会自动安装 Python 3.12、AstrBot、NapCat 与常用插件，并在页面上实时显示进度。期间不要关闭窗口。</p></div></div>
+          <div class="guide-step"><span class="step-no">3</span><div><b>导入已有环境</b><p>如果你已经有 AstrBot，在「设置」里填写 AstrBot 源码目录、Python 解释器路径和实例目录，保存后到「机器人」页导入或自动发现。</p></div></div>
+          <div class="guide-step"><span class="step-no">4</span><div><b>检查端口</b><p>每个实例的 AstrBot Dashboard 端口与 NapCat WebUI 端口会自动分配。如果提示端口冲突，可在实例配置中改成未被占用的端口。</p></div></div>
+          <div class="guide-tip">部署完成后建议先打开「总览」，确认实例状态为运行中，再继续扫码登录。</div>
+        </section>
+
+        <section class="card guide-sec" id="guide-login">
+          <div class="guide-head"><span class="guide-num">03</span><h3>启动与扫码登录</h3></div>
+          <div class="guide-step"><span class="step-no">1</span><div><b>点击启动</b><p>在「机器人」列表点击该实例的 ▶ 启动按钮。管理器会自动打开整屏二级页面，并停在「扫码 / 控制台」标签。</p></div></div>
+          <div class="guide-step"><span class="step-no">2</span><div><b>扫码登录 QQ</b><p>首次启动 NapCat 需要扫码。二维码直接显示在管理器内，用手机 QQ 扫描并在手机上确认登录即可。</p></div></div>
+          <div class="guide-step"><span class="step-no">3</span><div><b>二维码自动刷新</b><p>二维码约 2 分钟失效，失效后会自动换一张；也可以点「换一张」立即刷新。不要用旧二维码反复扫描。</p></div></div>
+          <div class="guide-step"><span class="step-no">4</span><div><b>查看控制台</b><p>二级页下半部分是 NapCat 控制台，实时显示运行输出。AstrBot 与 NapCat 都在后台隐藏运行，不会再弹出 cmd 黑窗口。</p></div></div>
+          <div class="guide-tip">登录成功后状态会变为绿色「已登录」。如果一直停在等待扫码，先看下方控制台是否有报错，再尝试停止并重新启动。</div>
+        </section>
+
+        <section class="card guide-sec" id="guide-daily">
+          <div class="guide-head"><span class="guide-num">04</span><h3>日常管理</h3></div>
+          <div class="guide-step"><span class="step-no">1</span><div><b>总览</b><p>查看所有实例的运行状态、健康分数与异常提醒，是每天打开管理器后的第一站。</p></div></div>
+          <div class="guide-step"><span class="step-no">2</span><div><b>机器人</b><p>在列表里启动、停止、重启实例，也可以打开二级页查看详情、二维码、控制台与 Dashboard 入口。</p></div></div>
+          <div class="guide-step"><span class="step-no">3</span><div><b>监控</b><p>「日志」可切换 Bot 日志、控制台与 NapCat 控制台；「告警中心」汇总健康、审批、任务与备份异常；「巡检」会做一次只读的端到端检查。</p></div></div>
+          <div class="guide-step"><span class="step-no">4</span><div><b>设置</b><p>维护源码与解释器路径、实例目录、通知渠道，以及备份与恢复。路径类配置修改后建议重启对应实例。</p></div></div>
+        </section>
+
+        <section class="card guide-sec" id="guide-advanced">
+          <div class="guide-head"><span class="guide-num">05</span><h3>进阶功能</h3></div>
+          <div class="guide-grid">
+            <div class="guide-feature"><b>活人感</b><p>让机器人按设定节奏活动，避免长期沉默被判定为异常账号。</p></div>
+            <div class="guide-feature"><b>群聊</b><p>查看群消息记录，配置群管理规则与安全策略。</p></div>
+            <div class="guide-feature"><b>人格</b><p>编写与切换人格提示词，让不同机器人拥有不同说话风格。</p></div>
+            <div class="guide-feature"><b>记忆</b><p>查看和清理长期记忆，配置记忆睡眠，避免上下文无限膨胀。</p></div>
+            <div class="guide-feature"><b>自动化</b><p>内置巡检、日报与定时任务；涉及写操作时会先进入审批。</p></div>
+            <div class="guide-feature"><b>插件</b><p>浏览能力市场，安装、卸载和更新 AstrBot 插件。</p></div>
+          </div>
+          <div class="guide-tip">不确定某个功能会不会影响机器人时，先在单个测试实例上操作，确认无误后再批量应用。</div>
+        </section>
+
+        <section class="card guide-sec" id="guide-data">
+          <div class="guide-head"><span class="guide-num">06</span><h3>数据与备份</h3></div>
+          <div class="guide-step"><span class="step-no">1</span><div><b>手动备份</b><p>打开「设置」，在「备份与恢复」里点「立即备份」，选择需要的组件即可生成一份快照。</p></div></div>
+          <div class="guide-step"><span class="step-no">2</span><div><b>定时备份</b><p>在「自动化 → 任务中心」可以配置定时备份、日报与记忆睡眠等周期任务。</p></div></div>
+          <div class="guide-step"><span class="step-no">3</span><div><b>恢复</b><p>恢复会覆盖当前配置，管理器会先自动生成回滚快照，再按确认提示执行，便于随时退回。</p></div></div>
+          <div class="guide-tip">配置里包含 API Key、QQ 号等敏感信息。不要把这些文件或管理器截图上传到公开仓库、群聊或网盘。</div>
+        </section>
+
+        <section class="card guide-sec" id="guide-faq">
+          <div class="guide-head"><span class="guide-num">07</span><h3>常见问题</h3></div>
+          <details class="guide-faq"><summary>二维码显示不出来或显示破图</summary><p>先确认实例已启动、NapCat 控制台没有报错，然后点「换一张」。仍然不行就停止实例再重新启动，二维码会重新生成。</p></details>
+          <details class="guide-faq"><summary>点击启动后提示失败</summary><p>到「设置」检查 AstrBot 源码目录和 Python 解释器路径是否正确。再到「监控 → 日志」查看 Bot 日志里的具体报错。</p></details>
+          <details class="guide-faq"><summary>扫码后还是未登录</summary><p>确认手机 QQ 上已经点了确认登录，并等待约 10 秒。若仍无变化，停止实例后重新启动，再扫新生成的二维码。</p></details>
+          <details class="guide-faq"><summary>提示端口被占用</summary><p>换一个未被占用的 Dashboard 或 NapCat 端口，保存后重启实例；也可以关闭占用该端口的其他程序。</p></details>
+          <details class="guide-faq"><summary>还会弹出 cmd 黑窗口吗</summary><p>不会。AstrBot、NapCat 和后台任务都使用隐藏窗口运行，所有输出统一进「扫码 / 控制台」与「监控 → 日志」。</p></details>
+          <details class="guide-faq"><summary>换电脑怎么迁移</summary><p>在旧电脑生成备份，把备份文件复制到新电脑后，在新电脑的「设置 → 备份与恢复」中恢复，再检查源码、解释器和实例路径。</p></details>
+        </section>
+      </div>
+    </div>
+  `;
+  $$(".guide-toc button, .guide-quick button", view).forEach((btn) => {
+    btn.onclick = () => {
+      const target = view.querySelector("#" + btn.dataset.target);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+  });
+}
+
+
 /* ------------------------------------------------------------- settings */
 
 async function loadNotifyStatus(view) {
@@ -3825,7 +4636,7 @@ async function viewSettings(view) {
     <div class="card" style="margin-top:18px">
       <div class="section-head" style="margin:0 0 14px"><h2>关于</h2></div>
       <div class="kv">
-        <div class="row-item"><span class="k">管理器</span><span class="v">牧鱼 v1.23.12</span></div>
+        <div class="row-item"><span class="k">管理器</span><span class="v">牧鱼 v1.30.8</span></div>
         <div class="row-item"><span class="k">运行方式</span><span class="v">本地 FastAPI + 桌面外壳（pywebview / Edge App）</span></div>
         <div class="row-item"><span class="k">登录凭据</span><span class="v">保存于 data/instances.json，仅本机可见</span></div>
       </div>

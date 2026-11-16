@@ -106,6 +106,12 @@ DEFAULT_SETTINGS = {
     "alert_telegram_token": "",
     "alert_telegram_chat_id": "",
     "alert_min_severity": "warning",
+    "offsite_enabled": False,
+    "offsite_url": "",
+    "offsite_user": "",
+    "offsite_password": "",
+    "offsite_dir": "muyu-backups",
+    "offsite_keep": 5,
 }
 
 PALETTE = [
@@ -160,6 +166,8 @@ def save_settings(patch: dict) -> dict:
             current[key] = value.strip()
         elif isinstance(value, bool):
             current[key] = value
+        elif isinstance(value, int):
+            current[key] = max(0, value)
     write_json(SETTINGS_PATH, current)
     return current
 

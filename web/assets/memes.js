@@ -120,8 +120,12 @@
         view.innerHTML = `<div class="empty" style="padding:40px">${icon("bots")}<h4>没有实例</h4><p>先在「机器人」里添加一个实例。</p></div>`;
         return;
       }
-      if (!list.some((item) => String(item.id) === String(instId))) {
-        instId = String(list[0].id);
+      const focusHit = globalThis.ManagerFocus && globalThis.ManagerFocus.consume(list);
+      if (focusHit) {
+        instId = String(focusHit.id);
+      } else if (!list.some((item) => String(item.id) === String(instId))) {
+        const focused = globalThis.ManagerFocus && globalThis.ManagerFocus.pick(list);
+        instId = String((focused || list[0]).id);
       }
       view.innerHTML = `
         <div class="gd-bar">

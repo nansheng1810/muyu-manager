@@ -142,6 +142,7 @@ def _local_qrcode_image(napcat_dir: Path) -> str:
             return ""
         patterns = (
             "NapCat.*/versions/*/resources/app/napcat/cache/qrcode.png",
+            "versions/*/resources/app/napcat/cache/qrcode.png",
             "*/versions/*/resources/app/napcat/cache/qrcode.png",
             "*/resources/app/napcat/cache/qrcode.png",
         )
@@ -253,12 +254,15 @@ def login_state(inst: dict, force_refresh: bool = False) -> dict:
         message = str(data.get("loginError"))
 
     since = now - _last_refresh.get(key, now)
+    image = _local_qrcode_image(napcat_dir)
+    if not image and qr_url:
+        image = _qrcode_image(qr_url)
     return {
         "running": True,
         "logged_in": False,
         "port": port,
         "phase": phase,
-        "qrcode": (_local_qrcode_image(napcat_dir) or _qrcode_image(qr_url)) if qr_url else "",
+        "qrcode": image,
         "message": message,
         "refreshed": refreshed,
         "refresh_in": max(0, int(QRCODE_REFRESH_SECONDS - since)),

@@ -1,0 +1,142 @@
+/* 牧鱼 · SnowLuma QQ 后端 */
+.sl-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.sl-hero h2 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+.sl-hero p { margin: 5px 0 0; color: var(--muted); font-size: 12.5px; }
+.sl-hero-actions { display: flex; gap: 8px; }
+.sl-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.sl-panel { padding: 16px; min-width: 0; }
+.sl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+.sl-head h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 7px; }
+.sl-head .icon { width: 16px; height: 16px; color: var(--accent); }
+.sl-muted { margin: 0 0 10px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.sl-error { margin: 8px 0 0; color: var(--bad-text); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.sl-meta {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 6px 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.sl-meta span { color: var(--muted); }
+.sl-meta b, .sl-meta code { font-weight: 500; overflow-wrap: anywhere; }
+.sl-meta code { font-size: 11.5px; color: var(--text-2, var(--text)); }
+.sl-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0 0; }
+.sl-actions .btn { display: inline-flex; align-items: center; gap: 5px; }
+.sl-actions .icon { width: 14px; height: 14px; }
+.sl-secret {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-1);
+  font-size: 12px;
+}
+.sl-secret span { color: var(--muted); }
+.sl-secret code { overflow-wrap: anywhere; }
+.sl-build { margin: 10px 0; }
+.sl-build-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--line);
+}
+.sl-build-bar i { display: block; height: 100%; width: 38%; border-radius: inherit; background: var(--accent); }
+.sl-build-bar.indeterminate i { animation: sl-progress 1.2s ease-in-out infinite; }
+@keyframes sl-progress {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(290%); }
+}
+.sl-build small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
+.sl-instances { display: grid; gap: 10px; }
+.sl-instance {
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-1);
+}
+.sl-instance-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.sl-instance-main b { display: block; font-size: 13px; }
+.sl-instance-main small { display: block; margin-top: 3px; color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.sl-instance-state { display: flex; gap: 5px; flex-wrap: wrap; }
+.sl-instance-note { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.sl-agent {
+  display: grid;
+  gap: 7px;
+  margin-top: 2px;
+  padding: 10px 11px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  background: var(--surface-0, transparent);
+}
+.sl-agent.on { border-style: solid; border-color: var(--accent); }
+.sl-agent-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.sl-agent-head b { font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+.sl-agent-head .icon { width: 14px; height: 14px; color: var(--accent); }
+.sl-agent-picker { display: grid; gap: 7px; padding-top: 8px; border-top: 1px solid var(--line); }
+.sl-agent-picker .sl-muted { margin: 0; }
+.sl-agent-groups { display: flex; flex-wrap: wrap; gap: 6px; }
+.sl-agent-groups .btn { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+.sl-agent-model { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sl-agent-model span { font-size: 12px; color: var(--muted); }
+.sl-agent-model select { flex: 1 1 180px; min-width: 0; max-width: 100%; }
+.sl-processes { display: grid; gap: 8px; }
+.sl-process {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-1);
+}
+.sl-process.blocked { opacity: .62; }
+.sl-process b { display: block; font-size: 12.5px; }
+.sl-process small { display: block; margin-top: 2px; color: var(--muted); font-size: 11.5px; }
+.sl-process code { display: block; margin-top: 4px; color: var(--muted); font-size: 10.5px; overflow-wrap: anywhere; }
+.sl-process-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.sl-blocked { color: var(--warn-text); font-size: 11px; white-space: nowrap; }
+.sl-callout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--warn-line, var(--line));
+  border-radius: 8px;
+  color: var(--warn-text);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.sl-callout span { flex: 1 1 240px; }
+.sl-steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 12px; line-height: 1.9; }
+.sl-steps li::marker { color: var(--accent); }
+@media (max-width: 1080px) {
+  .sl-grid { grid-template-columns: minmax(0, 1fr); }
+}

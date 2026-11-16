@@ -106,7 +106,7 @@ test("presence pages are wired into router, nav, IA and PWA shell", () => {
   assert.match(app, /SECTION_NAME = \{[^}]*presence: "活人感"/);
   assert.match(app, /presence: \{\s*hub: "hubLive"/);
   assert.match(app, /items: \[\s*\{ route: "life", icon: "sun" \}/);
-  assert.match(app, /items: \[\s*\{ route: "memes", icon: "model" \},?\s*\{ route: "vision"/);
+  assert.match(app, /items: \[\s*\{ route: "memes", icon: "model" \},?\s*\{ route: "imageMemes", icon: "fish" \},?\s*\{ route: "vision"/);
   assert.match(app, /items: \[\s*\{ route: "people", icon: "bots" \},?\s*\{ route: "presenceRelations"/);
   assert.match(app, /ManagerPresence/);
   assert.match(app, /presenceUI\?\.leave\(\)/);
@@ -127,9 +127,9 @@ test("presence pages are wired into router, nav, IA and PWA shell", () => {
   }
 
   assert.match(html, /\/assets\/presence\.js\?v=20261105d/);
-  assert.match(html, /href="#\/hubLive"/);
-  assert.match(html, /data-route="presence"/);
-  assert.match(html, /活人感/);
+  assert.match(html, /href="#\/functions"/);
+  assert.match(html, /data-route="functions"/);
+  assert.match(html, /功能管理/);
   assert.match(sw, /"\/assets\/presence\.js"/);
 });
 

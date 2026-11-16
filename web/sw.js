@@ -1,5 +1,5 @@
-/* AstrBot 舰队管理器 PWA：缓存静态壳，API 始终走网络。 */
-const CACHE_NAME = "fleet-shell-v1.23.12e";
+﻿/* AstrBot 舰队管理器 PWA：缓存静态壳，API 始终走网络。 */
+const CACHE_NAME = "fleet-shell-v1.30.8";
 const SHELL = [
   "/",
   "/assets/style.css",
@@ -12,6 +12,11 @@ const SHELL = [
   "/assets/guard.css",
   "/assets/insight.css",
   "/assets/deploy.css",
+  "/assets/bili_publish.css",
+  "/assets/image_memes.css",
+  "/assets/mcp_mode.css",
+  "/assets/native_mcp.css",
+  "/assets/snowluma.css",
   "/assets/consoles.js",
   "/assets/brain.js",
   "/assets/memory.js",
@@ -35,11 +40,23 @@ const SHELL = [
   "/assets/life.js",
   "/assets/people.js",
   "/assets/memes.js",
+  "/assets/image_memes.js",
+  "/assets/mcp_mode.js",
+  "/assets/native_mcp.js",
+  "/assets/snowluma.js",
+  "/assets/probability.js",
+  "/assets/napcat_probability.js",
   "/assets/vision.js",
   "/assets/hub.js",
   "/assets/ia.js",
   "/assets/automation_center.js",
   "/assets/deploy.js",
+  "/assets/bili_publish.js",
+  "/assets/knowledge.js",
+  "/assets/cost.js",
+  "/assets/snapshots.js",
+  "/assets/offsite.js",
+  "/assets/voice.js",
   "/assets/app.js"
 ];
 

@@ -1,8 +1,8 @@
-; 牧鱼 Windows 安装程序（Inno Setup 6）
+﻿; 牧鱼 Windows 安装程序（Inno Setup 6）
 ; 编译：ISCC.exe installer\muyu.iss
 
 #define MyAppName "牧鱼"
-#define MyAppVersion "1.23.12"
+#define MyAppVersion "1.30.8"
 #define MyAppPublisher "NanSheng"
 #define MyAppURL "https://github.com/nansheng1810/muyu-manager"
 #define MyAppExeName "牧鱼.exe"
@@ -38,7 +38,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "..\dist_v12312_build\牧鱼\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist_v1308_release\牧鱼\*"; DestDir: "{app}"; Excludes: "data\*,_backup*,*.bak"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

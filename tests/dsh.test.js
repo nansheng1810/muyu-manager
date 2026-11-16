@@ -105,7 +105,7 @@ test("manager shell exposes the DSH capability routes and assets", () => {
   assert.match(app, /capDshSkills: \{ section: "capability"/);
   assert.match(app, /capDshAccess: \{ section: "capability"/);
   assert.match(app, /return dshUI\.render\(view, "plugins"\)/);
-  assert.match(html, /href="#\/hubPlugin"/);
+  assert.match(html, /href="#\/functions"/);
   assert.match(html, /\/assets\/dsh\.js\?v=/);
   assert.match(html, /\/assets\/dsh\.css\?v=/);
 });

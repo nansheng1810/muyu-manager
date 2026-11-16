@@ -7,6 +7,7 @@ SkillHub local API mounted by the web profile.  AstrBot is kept on the
 
 from __future__ import annotations
 
+import http.cookiejar
 import json
 import os
 import re
@@ -60,6 +61,8 @@ SAFE_PLUGIN_PART = re.compile(r"^[A-Za-z0-9._-]+$")
 SAFE_PKG = re.compile(r"^@?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)?$")
 
 _lock = threading.Lock()
+_web_lock = threading.Lock()
+_web_opener: urllib.request.OpenerDirector | None = None
 _install_lock = threading.Lock()
 _install_job: dict[str, Any] = {
     "active": False,
@@ -120,6 +123,24 @@ def resolve_bin_js() -> Path:
             / "lib"
             / "bin.js"
         )
+    candidates.append(
+        Path("D:/驰风车队项目/ai机器人管理/mcp_dsh")
+        / "node_modules"
+        / "@deepseek-ai"
+        / "dsh"
+        / "lib"
+        / "bin.js"
+    )
+    candidates.append(
+        store.DATA_DIR
+        / "mcp"
+        / "dsh"
+        / "node_modules"
+        / "@deepseek-ai"
+        / "dsh"
+        / "lib"
+        / "bin.js"
+    )
     appdata = str(os.environ.get("APPDATA") or "").strip()
     if appdata:
         candidates.append(
@@ -225,6 +246,41 @@ def _tail(path: Path = LOG_PATH, lines: int = 120) -> list[str]:
         return []
 
 
+def _latest_token_url() -> str:
+    """DSH 2.4+ 的 Web 认证：启动日志里会打印带 token 的入口地址。"""
+    try:
+        lines = LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    pattern = re.compile(r"dsh web:\s*(http://127\.0\.0\.1:\d+/\?token=[A-Za-z0-9_\-]+)")
+    prefix = f"http://{HOST}:{PORT}/"
+    for line in reversed(lines):
+        match = pattern.search(line)
+        if match and match.group(1).startswith(prefix):
+            return match.group(1)
+    return ""
+
+
+def _web_client(force: bool = False) -> urllib.request.OpenerDirector | None:
+    """用启动 token 换取浏览器 cookie，之后的 /api 与 /skillhub 请求都带上它。"""
+    global _web_opener
+    with _web_lock:
+        if _web_opener is not None and not force:
+            return _web_opener
+        token_url = _latest_token_url()
+        if not token_url:
+            return None
+        jar = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        try:
+            with opener.open(token_url, timeout=15) as response:
+                response.read()
+        except Exception as exc:  # noqa: BLE001
+            raise DshError(f"DSH Web 认证失败：{exc}", 502) from exc
+        _web_opener = opener
+        return opener
+
+
 def _http_json(
     url: str,
     payload: dict | None = None,
@@ -234,13 +290,40 @@ def _http_json(
     headers = {"content-type": "application/json"}
     if payload is not None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+
+    def send() -> str:
+        request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        opener = _web_client()
+        if opener is None:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return response.read().decode("utf-8", "replace")
+        with opener.open(request, timeout=timeout) as response:
+            return response.read().decode("utf-8", "replace")
+
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read().decode("utf-8", "replace")
+        raw = send()
     except urllib.error.HTTPError as exc:
-        raw = exc.read().decode("utf-8", "replace")
-        raise DshError(f"DSH 返回 HTTP {exc.code}：{raw[:300]}", 502) from exc
+        if exc.code != 401:
+            raw = exc.read().decode("utf-8", "replace")
+            raise DshError(f"DSH 返回 HTTP {exc.code}：{raw[:300]}", 502) from exc
+        try:
+            exc.read()
+        except Exception:  # noqa: BLE001
+            pass
+        if _web_client(force=True) is None:
+            raise DshError(
+                "DSH Web 要求浏览器认证，但日志里没有启动 token。请在管理器里重启一次 DSH。",
+                409,
+            )
+        try:
+            raw = send()
+        except urllib.error.HTTPError as retry_exc:
+            text = retry_exc.read().decode("utf-8", "replace")
+            raise DshError(
+                f"DSH 返回 HTTP {retry_exc.code}：{text[:300]}", 502
+            ) from retry_exc
+    except DshError:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise DshError(f"无法连接 DSH Web（{url}）：{exc}", 503) from exc
     try:
@@ -262,14 +345,35 @@ def skillhub(method: str, payload: dict | None = None, timeout: float = 30.0) ->
 
 
 def rpc_011(method: str, args: dict | None = None, timeout: float = 20.0) -> dict:
-    """Call the DSH 0.1.x dotted RPC surface (no browser cookie)."""
-    envelope = {
-        "type": "client-request",
-        "rpcId": f"manager-{time.time_ns()}",
-        "method": method,
-        "payload": dict(args or {}),
-    }
-    data = _http_json(f"{URL}/api/{method}", envelope, timeout=timeout)
+    """Call the DSH RPC surface.
+
+    DSH 0.1.x 使用 ``/api/session.create`` 这种点号路径；2.x 的 API 网关改成
+    ``/api/session/create`` 两段式路径，这里按顺序自动兼容。
+    """
+    payload = dict(args or {})
+    candidates = [(method, f"{URL}/api/{method}", payload)]
+    if "." in method:
+        slash = method.replace(".", "/")
+        wrapped = {"args": {"request": payload}} if payload else {"args": {}}
+        candidates.append((slash, f"{URL}/api/{slash}", wrapped))
+    data: dict = {}
+    last_error: DshError | None = None
+    for endpoint, url, body in candidates:
+        envelope = {
+            "type": "client-request",
+            "rpcId": f"manager-{time.time_ns()}",
+            "method": endpoint,
+            "payload": body,
+        }
+        try:
+            data = _http_json(url, envelope, timeout=timeout)
+            break
+        except DshError as exc:
+            last_error = exc
+            if "HTTP 404" not in exc.message:
+                raise
+    else:
+        raise last_error or DshError(f"DSH RPC {method} 不可用", 502)
     if data.get("type") != "server-response":
         raise DshError("DSH RPC 返回了意外响应", 502)
     result = data.get("result") or {}
@@ -278,6 +382,39 @@ def rpc_011(method: str, args: dict | None = None, timeout: float = 20.0) -> dic
         raise DshError(str(error.get("message") or f"DSH RPC {method} 失败"), 502)
     value = result.get("value")
     return value if isinstance(value, dict) else {"value": value}
+
+
+_catalog_lock = threading.Lock()
+_catalog_cache: dict[str, Any] = {"at": 0.0, "value": {}}
+
+
+def model_catalog(max_age: float = 120.0) -> dict:
+    """读取 DSH 的模型目录（默认模型 + 各 provider 的模型列表），短缓存。"""
+    with _catalog_lock:
+        cached = _catalog_cache.get("value") or {}
+        if cached and time.time() - float(_catalog_cache.get("at") or 0.0) < max_age:
+            return cached
+    catalog = rpc_011("session.modelCatalog", {}, timeout=30)
+    with _catalog_lock:
+        _catalog_cache["at"] = time.time()
+        _catalog_cache["value"] = catalog
+    return catalog
+
+
+def select_model(session_id: str, provider: str, model: str) -> dict:
+    """给指定 DSH 会话指定模型，用于绕过不可用的默认模型。"""
+    provider = str(provider or "").strip()
+    model = str(model or "").strip()
+    if not provider or not model:
+        raise DshError("provider 和 model 都不能为空", 400)
+    selected = rpc_011(
+        "session.selectModel",
+        {"sessionId": session_id, "provider": provider, "model": model},
+        timeout=30,
+    )
+    with _catalog_lock:
+        _catalog_cache["at"] = 0.0
+    return selected
 
 
 def _extract_reply_text(data: dict) -> str:
@@ -290,6 +427,30 @@ def _extract_reply_text(data: dict) -> str:
         if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
             parts.append(block["text"])
     return "\n".join(parts).strip()
+
+
+def _session_events(session_id: str) -> list:
+    """读取会话事件；兼容 0.1.x 的 session.history 与 2.x 的 projections+page。"""
+    try:
+        history = rpc_011(
+            "session.history", {"sessionId": session_id, "maxMessages": 300}, timeout=20
+        )
+        return list(history.get("events") or [])
+    except DshError as exc:
+        if "HTTP 404" not in exc.message:
+            raise
+    projection = rpc_011("session.projections", {"sessionId": session_id}, timeout=20)
+    through_seq = int(projection.get("asOfSeq") or 0)
+    page = rpc_011(
+        "session.page",
+        {
+            "address": {"kind": "session", "sessionId": session_id},
+            "throughSeq": through_seq,
+            "maxMessages": 300,
+        },
+        timeout=30,
+    )
+    return list(page.get("records") or [])
 
 
 def _cancel_session(session_id: str) -> None:
@@ -324,15 +485,13 @@ def run_prompt(
         if not session_id:
             raise DshError("DSH 未返回会话 ID", 502)
     else:
-        history = rpc_011(
-            "session.history", {"sessionId": session_id, "maxMessages": 300}, timeout=20
-        )
-        baseline = len(history.get("events") or [])
+        baseline = len(_session_events(session_id))
     try:
         rpc_011(
             "session.prompt",
             {
                 "sessionId": session_id,
+                "requestId": f"manager-{time.time_ns()}",
                 "mode": "queue",
                 "content": [{"type": "text", "text": text}],
                 "clientTimeZone": "Asia/Shanghai",
@@ -345,14 +504,12 @@ def run_prompt(
         raise
     start = time.monotonic()
     texts: list[str] = []
+    last_error = ""
     done = False
     done_polls = 0
     while time.monotonic() - start < timeout:
         time.sleep(max(0.5, min(float(poll_interval), 10.0)))
-        history = rpc_011(
-            "session.history", {"sessionId": session_id, "maxMessages": 300}, timeout=30
-        )
-        events = history.get("events") or []
+        events = _session_events(session_id)
         for entry in events[baseline:]:
             ev = entry.get("event") if isinstance(entry, dict) else None
             if not isinstance(ev, dict):
@@ -365,6 +522,10 @@ def run_prompt(
                     texts.append(part)
             elif ev_type == "turn/end":
                 done = True
+                reason = data.get("reason") if isinstance(data.get("reason"), dict) else {}
+                if reason.get("kind") == "error":
+                    error = reason.get("error") if isinstance(reason.get("error"), dict) else {}
+                    last_error = str(error.get("message") or "模型调用失败")
         if done:
             done_polls += 1
             if texts or done_polls >= 2:
@@ -386,6 +547,7 @@ def run_prompt(
         "sessionId": session_id,
         "duration_ms": duration_ms,
         "truncated": truncated,
+        "error": last_error,
     }
 
 
@@ -495,6 +657,18 @@ def start() -> dict:
                 )
             env = dict(os.environ)
             env["DSH_HOME"] = str(resolve_home())
+            try:
+                from . import mcp_mode
+
+                env.update(mcp_mode.dsh_env())
+            except Exception:
+                pass
+            try:
+                from . import mcp_native
+
+                env.update(mcp_native.dsh_env())
+            except Exception:
+                pass
             try:
                 proc = subprocess.Popen(
                     build_start_args(bin_js, overlay),

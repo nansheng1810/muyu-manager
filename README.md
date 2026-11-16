@@ -7,7 +7,7 @@
 </a>
 
 <p>
-  <img src="https://img.shields.io/badge/version-v1.27.0-6366f1?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="version" />
+  <img src="https://img.shields.io/badge/version-v1.27.3-6366f1?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="version" />
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0ea5e9?style=for-the-badge&logo=windows11&logoColor=white" alt="platform" />
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="python" />
   <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="fastapi" />
@@ -15,7 +15,7 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/Python%20%E6%B5%8B%E8%AF%95-486%20%E9%A1%B9-10b981?style=flat-square" alt="python tests" />
+  <img src="https://img.shields.io/badge/Python%20%E6%B5%8B%E8%AF%95-496%20%E9%A1%B9-10b981?style=flat-square" alt="python tests" />
   <img src="https://img.shields.io/badge/Node%20%E6%B5%8B%E8%AF%95-105%20%E9%A1%B9-10b981?style=flat-square" alt="node tests" />
   <img src="https://img.shields.io/badge/%E7%A6%BB%E7%BA%BF%E5%8F%AF%E7%94%A8-PWA-a855f7?style=flat-square" alt="pwa" />
 </p>
@@ -75,6 +75,19 @@ bili-cli 扫码登录、自动发布参数、本地视频手动投稿与投稿�
 
 </td>
 </tr>
+<tr>
+<td colspan="2" valign="top">
+
+### 🔌 原生 MCP
+牧鱼自己当 MCP 宿主，Codex / DSH 连接管理器后直接接管现有 AstrBot / NapCat 的 QQ 群。AstrBot 侧只装一个薄桥插件：接管期间暂停默认 LLM 回复，但保留 LivingMemory、心情、拟人、关系、节律、日记、表情包和收件箱等插件钩子。Agent 可以读取这些核心数据，再通过桥发送纯文本气泡。不需要 Tulpa，也不改变现有机器人账号和插件数据。
+
+固定路由：**DSH → 大肥鱼 `f0e1e0b6`（18778）**，**Codex → 龙娘 `bot-339f`（18779）**。两个端点各自独立 Token，并在服务端锁定实例，Agent 传其他实例会被拒绝。
+
+### 🐟 SnowLuma QQ 后端
+在「能力 → QQ 后端」里可以把 NapCat 替换成 SnowLuma，同时保留 AstrBot、aiocqhttp、所有插件和记忆。管理器负责构建/启停 SnowLuma、读取 QQ 进程、写入 OneBot 反向 WS，并按实例一键绑定；需要回退时一键卸载 SnowLuma 进程并切回 NapCat。SnowLuma 首次使用仍需在它自己的控制台同意 EULA / 隐私政策并登录普通 QQ 客户端。SnowLuma 是源码可见非商业许可，不随牧鱼安装包分发。
+
+</td>
+</tr>
 </table>
 
 > [!TIP]
@@ -94,6 +107,8 @@ bili-cli 扫码登录、自动发布参数、本地视频手动投稿与投稿�
 | 🎙️ **语音** | 驰风 Breeze TTS · 音色设计 · 声音克隆 · 试听 · 人声预设增删改 · 音色锁定 · 合成缓存 LRU |
 | ⏱️ **自动化** | 定时任务 · DSH Bridge · 发布检查 · 效果评估 |
 | 📺 **B 站** | 扫码登录 · 自动发布参数 · 本地视频投稿 · 投稿记录 |
+| 🔌 **原生 MCP** | 管理器托管 MCP · AstrBot 桥接管 QQ · LivingMemory/拟人/心情/关系/表情包/收件箱工具 |
+| 🐟 **SnowLuma** | NapCat 替换 · 设备进程选择 · AstrBot 一键绑定 · 一键切回 NapCat |
 | 📱 **PWA** | 浏览器访问 · 添加到桌面 · 离线外壳缓存 |
 
 ---
@@ -221,8 +236,8 @@ node --test "tests/*.test.js"
 ```
 
 <p>
-  <img src="https://img.shields.io/badge/Python-486%20passed-10b981?style=flat-square&logo=python&logoColor=white" alt="python" />
-  <img src="https://img.shields.io/badge/Node-105%20passed-10b981?style=flat-square&logo=nodedotjs&logoColor=white" alt="node" />
+  <img src="https://img.shields.io/badge/Python-523%20passed-10b981?style=flat-square&logo=python&logoColor=white" alt="python" />
+  <img src="https://img.shields.io/badge/Node-113%20passed-10b981?style=flat-square&logo=nodedotjs&logoColor=white" alt="node" />
 </p>
 
 ---

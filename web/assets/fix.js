@@ -339,7 +339,9 @@
         view.innerHTML = emptyBox("没有可用实例", "请先在「机器人」页新增或接入一个机器人。");
         return;
       }
-      if (!instId || !list.some((item) => item.id === instId)) instId = list[0].id;
+      const focusHit = globalThis.ManagerFocus && globalThis.ManagerFocus.consume(list);
+      if (focusHit) instId = String(focusHit.id);
+      else if (!instId || !list.some((item) => item.id === instId)) instId = ((globalThis.ManagerFocus && globalThis.ManagerFocus.pick(list)) || list[0]).id;
       view.innerHTML = `
         <div class="chips">
           ${list.map((item) => `<button class="chip ${item.id === instId ? "active" : ""}" data-fx-inst="${esc(item.id)}">${esc(item.name || item.id)}${item.status && item.status.running ? "" : "（未运行）"}</button>`).join("")}

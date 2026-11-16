@@ -1,4 +1,4 @@
-"""自动化注册表：内置巡检任务、一次性补种、DSH 技能接入与监控概览。"""
+﻿"""自动化注册表：内置巡检任务、一次性补种、DSH 技能接入与监控概览。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import fleet_store, store, tasks as tasks_mod
 
-VERSION = "1.23.12"
+VERSION = "1.30.8"
 DSH_CACHE_SECONDS = 15.0
 
 # 可按 id 补种的内置任务；已有同名任务时只补齐缺失项，不覆盖用户配置。

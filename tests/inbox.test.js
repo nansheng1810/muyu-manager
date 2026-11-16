@@ -1,4 +1,4 @@
-const test = require("node:test");
+﻿const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -79,7 +79,7 @@ test("inbox page is wired into nav and scripts", () => {
   assert.match(html, /href="#\/hubBots"/);
   assert.match(html, /data-route="bots"/);
   assert.match(html, /id="i-inbox"/);
-  assert.match(html, /v1\.23\.12 · 本地运行/);
+  assert.match(html, /v1\.30\.8 · 本地运行/);
   assert.ok(ia.KNOWN_ROUTES.has("inbox"));
   assert.deepEqual(ia.resolveRoute("#/inbox"), { route: "inbox", redirect: false });
 });

@@ -1,4 +1,4 @@
-const test = require("node:test");
+﻿const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -22,7 +22,7 @@ test("PWA shell has manifest, theme and service worker registration", () => {
 
 test("service worker caches shell but leaves API on network", () => {
   const sw = fs.readFileSync(path.join(root, "web/sw.js"), "utf8");
-  assert.match(sw, /fleet-shell-v1\.23/);
+  assert.match(sw, /fleet-shell-v1\.30\.8/);
   assert.match(sw, /"\/assets\/human\.js"/);
   assert.match(sw, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(sw, /request\.mode === "navigate"/);

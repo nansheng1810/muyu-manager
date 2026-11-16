@@ -1,4 +1,4 @@
-/* 牧鱼 · 一键部署首屏：机器上没有任何机器人时只展示这个页面 */
+﻿/* 牧鱼 · 一键部署首屏：机器上没有任何机器人时只展示这个页面 */
 (function () {
   "use strict";
 
@@ -268,7 +268,7 @@
             </aside>
           </div>
           ${enhancePanel()}
-          <footer class="deploy-foot">牧鱼 v1.23.12 · 部署过程只在本机执行，API Key 仅写入本地实例配置</footer>
+          <footer class="deploy-foot">牧鱼 v1.30.8 · 部署过程只在本机执行，API Key 仅写入本地实例配置</footer>
         </div>`;
     }
 
